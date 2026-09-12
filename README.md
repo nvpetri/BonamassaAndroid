@@ -25,14 +25,18 @@ O cardápio, preços, frete, cupom e regra de meio a meio são **exemplos a apro
 
 ## Abrir no Android Studio (Windows)
 
-1. Extraia o ZIP. Abra a pasta `BonamassaAndroid` em **File → Open**; não apenas a subpasta `app`.
-2. Instale/configure um **JDK completo 17**. JRE não é suficiente. Em Gradle JDK, selecione o JDK 17.
+1. Clone este repositório (ou extraia o ZIP). Abra a pasta `BonamassaAndroid` em **File → Open**; não apenas a subpasta `app`.
+2. Em **File → Settings → Build, Execution, Deployment → Build Tools → Gradle → Gradle JDK**, selecione um **JDK completo 17 ou 21**. Pode usar o JDK incluído no Android Studio se for uma dessas versões. JRE não é suficiente. O projeto usa esse JDK e gera bytecode compatível com Java 17.
 3. No SDK Manager, instale **Android SDK Platform 35**, **Build Tools 35.0.0** e Platform Tools. Leia e aceite as licenças aplicáveis no seu ambiente.
 4. Aguarde **Sync Project with Gradle Files**. A primeira sincronização precisa de Internet.
 5. Crie um emulador Android 8.0/API 26 ou superior, ou conecte um celular com depuração USB.
 6. Selecione `app` e clique em **Run**.
 
 Se o Gradle reclamar de `SDK location not found`, configure o SDK no Android Studio. Ele poderá gerar o arquivo local `local.properties`. Não compartilhe esse arquivo nem caminhos específicos do seu computador.
+
+Se aparecer `Undefined Toolchain Download Repositories` junto de `Cannot find a Java installation` no módulo `core`, confira se está usando a versão atual deste repositório e um JDK completo 17 ou 21 na opção acima. A configuração atual não exige baixar um JDK 17 separado. Clique em **Sync Project with Gradle Files** após alterar o Gradle JDK.
+
+Ao executar pelo terminal, configure `JAVA_HOME` para o mesmo JDK selecionado no Android Studio. Depois de trocar o JDK, execute `.\gradlew.bat --stop` antes de rodar os comandos de compilação novamente.
 
 ### Gerar um APK de teste
 
@@ -59,7 +63,7 @@ Para testes de interface, com aparelho ou emulador conectado:
 .\gradlew.bat :app:connectedDebugAndroidTest
 ```
 
-Para executar somente as regras sem instalar o SDK Android (ainda exige JDK 17 e Internet na primeira vez):
+Para executar somente as regras sem instalar o SDK Android (ainda exige JDK completo 17 ou 21 e Internet na primeira vez):
 
 ```powershell
 .\gradlew.bat -PcoreOnly :core:test
