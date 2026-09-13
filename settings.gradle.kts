@@ -22,4 +22,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "Bonamassa"
 include(":core")
+include(":client")
 if (!providers.gradleProperty("coreOnly").isPresent) include(":app")
