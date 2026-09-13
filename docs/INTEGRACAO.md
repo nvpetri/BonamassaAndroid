@@ -73,7 +73,7 @@ São tratados `NEW`, `CONFIRMED`, `PREPARING`, `READY`, `OUT_FOR_DELIVERY`, `RET
 
 A URL aceita somente uma origem HTTP(S), sem usuário/senha, caminho, query ou fragmento. Release exige HTTPS; apenas o manifesto debug libera HTTP para desenvolvimento na rede local. Não há trust manager permissivo, credencial fixa nem bypass de TLS.
 
-O transporte recusa redirects e desativa repetição automática de conexões. As fotos são públicas e aceitas somente em caminhos de imagens da loja configurada; elas não recebem token. O HTTP client não instala logger de credenciais, corpo ou dados pessoais.
+O transporte recusa redirects e desativa repetição automática de envios. Consultas GET podem recuperar conexões interrompidas; conexões ociosas são encerradas em 2 segundos para evitar reutilizar sockets fechados pela API. As fotos são públicas e aceitas somente em caminhos de imagens da loja configurada; elas não recebem token. O HTTP client não instala logger de credenciais, corpo ou dados pessoais.
 
 A preparação do release exige URL HTTPS e assinatura do ambiente de produção. A versão de SDK e as políticas de publicação deverão ser revistas ao preparar a entrega pela Play Store.
 

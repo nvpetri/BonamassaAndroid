@@ -2,6 +2,7 @@ package br.com.bonamassa.client
 
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.SocketPolicy
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
@@ -142,6 +143,15 @@ class ClientContractTest {
             val client = BonamassaApi(Endpoint.parse(server.url("/").toString(), "bonamassa", true))
             try { client.me("secret"); fail() } catch (e: ApiFailure) { assertEquals(307, e.status) }
             assertEquals(1, server.requestCount)
+        }
+    }
+    @Test fun queriesRecoverAfterTheServerClosesAnIdleConnection() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("{}").setSocketPolicy(SocketPolicy.DISCONNECT_AT_END))
+            server.enqueue(MockResponse().setBody("{\"ok\":true}"))
+            val client = BonamassaApi(Endpoint.parse(server.url("/").toString(), "bonamassa", true))
+            client.request("GET", "/v1/health")
+            assertTrue(client.request("GET", "/v1/health").getBoolean("ok"))
         }
     }
     @Test fun staffLoginIsRejectedAndItsIssuedTokenIsRevoked() {

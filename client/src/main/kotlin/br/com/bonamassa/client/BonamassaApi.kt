@@ -1,6 +1,7 @@
 package br.com.bonamassa.client
 
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.ConnectionPool
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -29,8 +30,11 @@ data class Endpoint(val origin: String, val storeSlug: String) {
 
 /** No redirects, automatic write retries, cookies or HTTP credential logging. */
 class BonamassaApi(val endpoint: Endpoint, private val http: OkHttpClient = newHttpClient()) {
+    private val reads = http.newBuilder().retryOnConnectionFailure(true).build()
     companion object {
         fun newHttpClient() = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false)
+            // Node closes idle HTTP/1 connections after a few seconds. Retire ours first.
+            .connectionPool(ConnectionPool(5, 2, TimeUnit.SECONDS))
             .connectTimeout(10, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS).callTimeout(30, TimeUnit.SECONDS).build()
     }
     fun request(method: String, path: String, token: String? = null, body: JSONObject? = null, key: String? = null): JSONObject {
@@ -39,7 +43,7 @@ class BonamassaApi(val endpoint: Endpoint, private val http: OkHttpClient = newH
             .method(method, body?.toString()?.toRequestBody("application/json; charset=utf-8".toMediaType()))
         token?.let { request.header("Authorization", "Bearer $it") }
         key?.let { request.header("Idempotency-Key", it) }
-        http.newCall(request.build()).execute().use { response ->
+        (if (method == "GET") reads else http).newCall(request.build()).execute().use { response ->
             val raw = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
                 val error = runCatching { JSONObject(raw) }.getOrNull()

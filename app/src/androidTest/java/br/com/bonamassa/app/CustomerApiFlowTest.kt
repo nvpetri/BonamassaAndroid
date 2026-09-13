@@ -1,6 +1,5 @@
 package br.com.bonamassa.app
 
-import android.graphics.Bitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
@@ -14,7 +13,7 @@ import org.junit.Rule
 import org.junit.Test
 import java.time.Instant
 import java.util.UUID
-import java.io.File
+import java.io.FileInputStream
 
 /** Opt-in only. CI supplies an isolated API/PostgreSQL store, never a developer's live store. */
 class CustomerApiFlowTest {
@@ -24,10 +23,10 @@ class CustomerApiFlowTest {
     private fun input(label: String, text: String) { compose.onNodeWithText(label).performScrollTo().performTextReplacement(text) }
     private fun screenshot(name: String) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val folder = File(instrumentation.targetContext.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
-        val bitmap = instrumentation.uiAutomation.takeScreenshot()
-        File(folder, name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        bitmap.recycle()
+        // Shell-owned temporary output survives AGP uninstalling the tested app.
+        for (command in listOf("mkdir -p /data/local/tmp/bonamassa-screenshots", "screencap -p /data/local/tmp/bonamassa-screenshots/$name")) {
+            instrumentation.uiAutomation.executeShellCommand(command).use { descriptor -> FileInputStream(descriptor.fileDescriptor).use { it.readBytes() } }
+        }
     }
 
     @Test fun customerOrderUsesApiPricesAndReceivesKitchenAndDriverUpdates() {
