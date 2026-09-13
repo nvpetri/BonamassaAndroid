@@ -101,6 +101,24 @@ class ClientContractTest {
         assertNotEquals(Status.DELIVERED.label, Status.RETURNED.label)
         assertEquals(9, Status.entries.size)
     }
+    private fun order(status: Status = Status.NEW) = Order(UUID.randomUUID().toString(), 123, 1, status, null, Mode.PICKUP,
+        "2026-09-13T00:00:00Z", "2026-09-13T00:00:00Z", emptyList(), quote().totals, user.name, null, Method.CARD, false, null, 0, "", emptyList())
+    @Test fun acknowledgmentAtomicallyClearsOnlyTheCartConsumedByAnOrder() {
+        val order = order()
+        val original = SavedState(cart = listOf(pizza), pending = Pending.order(quote(), endpoint, user))
+        val restored = SavedCodec.decode(SavedCodec.encode(original.acknowledge(order)))
+        assertTrue(restored.cart.isEmpty()); assertNull(restored.pending); assertEquals(order.id, restored.lastOrderId)
+        val cancellation = original.copy(pending = Pending.cancel(order, "Desisti", endpoint, user)).acknowledge(order.copy(status = Status.CANCELLED))
+        assertEquals(listOf(pizza), cancellation.cart); assertNull(cancellation.pending)
+    }
+    @Test fun cancellationRequiresReasonAndAnUnacceptedOrder() {
+        rejected { Pending.cancel(order(Status.CONFIRMED), "Desisti", endpoint, user) }
+        rejected { Pending.cancel(order(), " ", endpoint, user) }
+        val order = order()
+        val pending = Pending.cancel(order, "Desisti", endpoint, user)
+        assertEquals("/v1/orders/${order.id}/cancel", pending.path)
+        assertEquals(1, JSONObject(pending.body).getInt("expectedVersion"))
+    }
     @Test fun transientFailuresKeepPendingWrites() {
         listOf(401, 408, 429, 500, 502, 503, 307).forEach { assertFalse(ApiFailure(it, "ERROR", "", null).definitive) }
         assertFalse(ApiFailure(409, "IDEMPOTENCY_CONFLICT", "", null).definitive)

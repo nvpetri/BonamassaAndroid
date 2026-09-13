@@ -1,5 +1,6 @@
 package br.com.bonamassa.app
 
+import android.graphics.Bitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
@@ -13,6 +14,7 @@ import org.junit.Rule
 import org.junit.Test
 import java.time.Instant
 import java.util.UUID
+import java.io.File
 
 /** Opt-in only. CI supplies an isolated API/PostgreSQL store, never a developer's live store. */
 class CustomerApiFlowTest {
@@ -20,6 +22,13 @@ class CustomerApiFlowTest {
     private fun waitText(text: String) = compose.waitUntil(30_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
     private fun click(text: String) { compose.onNodeWithText(text).performScrollTo().performClick() }
     private fun input(label: String, text: String) { compose.onNodeWithText(label).performScrollTo().performTextReplacement(text) }
+    private fun screenshot(name: String) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val folder = File(instrumentation.targetContext.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
+        val bitmap = instrumentation.uiAutomation.takeScreenshot()
+        File(folder, name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        bitmap.recycle()
+    }
 
     @Test fun customerOrderUsesApiPricesAndReceivesKitchenAndDriverUpdates() {
         assumeTrue(InstrumentationRegistry.getArguments().getString("bonamassaIntegration") == "true")
@@ -42,7 +51,7 @@ class CustomerApiFlowTest {
             input("E-mail", "android-$tag@teste.example")
             input("Senha", "Cliente-ci-password-2026")
             click("Criar minha conta")
-            waitText("Cliente Android $tag")
+            waitText("Sair da conta")
             compose.onNodeWithText("Cardápio").performClick()
             waitText("Calabresa")
             click("Calabresa")
@@ -65,6 +74,7 @@ class CustomerApiFlowTest {
             click("Pizza Android $tag")
             compose.onNodeWithText("Conferir valores").performClick()
             waitText("VALORES CONFIRMADOS PELA PIZZARIA")
+            screenshot("cliente-revisao.png")
             val saved = requireNotNull(secure.read())
             val session = requireNotNull(saved.session)
             assertEquals("CUSTOMER", session.user.role)
@@ -105,6 +115,7 @@ class CustomerApiFlowTest {
             current = command(current, "complete", objectOf("recipient" to "Cliente Android", "paymentCollected" to true), driver.accessToken, "/v1/driver/deliveries")
             assertEquals(Status.DELIVERED, current.status)
             waitText("Obrigado por escolher a Bonamassa!")
+            screenshot("cliente-entregue.png")
 
             // Same production transport against real PostgreSQL: fixed combo and retry recovery.
             val comboQuote = api.quote(session.accessToken, listOf(DraftLine(Kind.COMBO, "combo-dupla")), Checkout(mode = Mode.PICKUP))

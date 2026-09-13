@@ -1,106 +1,84 @@
-# Bonamassa Android — 0.2.0 demo
+# Bonamassa Android — cliente conectado
 
-App cliente nativo em **Kotlin + Jetpack Compose**, com a identidade Bonamassa em preto, vermelho e dourado.
+App nativo em Kotlin e Jetpack Compose, integrado à [APIBonamassa](https://github.com/nvpetri/APIBonamassa). Mantém a identidade preta, vermelha e dourada da Bonamassa. A versão padrão envia pedidos à API configurada.
 
-**Código-fonte de uma demonstração offline. Não é um APK e não recebe pedidos reais.** A interface não foi executada em emulador neste ambiente; consulte `docs/VERIFICACAO.md` antes de apresentar.
+## Testar no Android
 
-## O que esta versão implementa
+1. Deixe a API funcionando no PC na porta **3001** e confirme que a loja está aberta no painel.
+2. Atualize este repositório e abra a pasta raiz no Android Studio. Use JDK 17 ou 21 no Gradle, SDK Android 35 e Build Tools 35.0.0.
+3. Execute a variante **debug** em um Android 8 ou superior. Também há um APK debug nos artefatos da execução do GitHub Actions.
+4. No app, abra **Conta → Configurar API**. Informe `http://IPV4-DO-PC:3001` e o identificador `bonamassa` (ou o slug configurado na sua API). Não acrescente `/v1`.
+5. No emulador Android Studio, use `http://10.0.2.2:3001`. No celular físico, use o IPv4 do PC na mesma rede Wi-Fi; `localhost` apontaria para o próprio celular.
+6. Toque em **Entrar ou criar conta → Criar conta**. Cadastre um cliente com senha de pelo menos 12 caracteres. A conta de gestor usada no painel não é uma conta de cliente.
+7. Monte a pizza, confira a sacola, escolha entrega ou retirada e pagamento. Toque em **Conferir valores** e depois **Confirmar e enviar pedido**.
+8. No painel conectado à mesma API/loja, aceite e prepare o pedido. A tela do cliente atualiza o status automaticamente enquanto estiver aberta.
 
-- Início com a marca enviada, destaques e atalho para pedido em andamento.
-- Cardápio de pizzas, bebidas e doce; busca por nome/ingrediente e filtro de favoritos.
-- Pizza de um ou dois sabores, três tamanhos, borda e adicionais.
-- Observação editável, quantidade e cálculo em centavos, sem usar ponto flutuante nas regras.
-- Sacola com itens individuais; alterar quantidade, editar personalização e remover com confirmação.
-- Cupom BONA10 com mínimo, limite e mensagens de erro.
-- Entrega ou retirada, perfil local, endereço, validação dos campos e troco.
-- Escolha de Pix, cartão ou dinheiro **sem cobrança**; confirmação explícita de demonstração.
-- Histórico persistido, detalhes completos, pedir novamente e cancelamento inicial.
-- Avanço **manual** das etapas para apresentação; retirada não passa pelo estado de motoboy.
-- DataStore com alterações atômicas: sacola, favoritos, dados salvos e histórico sobrevivem ao fechamento do app.
-- Erros de leitura não apagam os dados silenciosamente; limpeza exige confirmação.
-- Ícone adaptativo, tratamento de insets/teclado, conteúdo rolável e previews Compose.
-- 36 testes JVM de regras/serialização e 3 testes de interface incluídos.
+Se o celular não conectar, abra `http://IPV4-DO-PC:3001/v1/health` no navegador dele. Confirme o IP atual, a mesma rede, o processo da API e a regra do Firewall do Windows para a porta 3001 na rede privada. Não é necessário publicar a API na internet nem abrir portas no roteador para esse teste.
 
-O cardápio, preços, frete, cupom e regra de meio a meio são **exemplos a aprovar com a pizzaria**. As imagens de alimentos são ilustrações desenhadas pelo app; não são fotos dos produtos.
-
-## Abrir no Android Studio (Windows)
-
-1. Clone este repositório (ou extraia o ZIP). Abra a pasta `BonamassaAndroid` em **File → Open**; não apenas a subpasta `app`.
-2. Em **File → Settings → Build, Execution, Deployment → Build Tools → Gradle → Gradle JDK**, selecione um **JDK completo 17 ou 21**. Pode usar o JDK incluído no Android Studio se for uma dessas versões. JRE não é suficiente. O projeto usa esse JDK e gera bytecode compatível com Java 17.
-3. No SDK Manager, instale **Android SDK Platform 35**, **Build Tools 35.0.0** e Platform Tools. Leia e aceite as licenças aplicáveis no seu ambiente.
-4. Aguarde **Sync Project with Gradle Files**. A primeira sincronização precisa de Internet.
-5. Crie um emulador Android 8.0/API 26 ou superior, ou conecte um celular com depuração USB.
-6. Selecione `app` e clique em **Run**.
-
-Se o Gradle reclamar de `SDK location not found`, configure o SDK no Android Studio. Ele poderá gerar o arquivo local `local.properties`. Não compartilhe esse arquivo nem caminhos específicos do seu computador.
-
-Se aparecer `Undefined Toolchain Download Repositories` junto de `Cannot find a Java installation` no módulo `core`, confira se está usando a versão atual deste repositório e um JDK completo 17 ou 21 na opção acima. A configuração atual não exige baixar um JDK 17 separado. Clique em **Sync Project with Gradle Files** após alterar o Gradle JDK.
-
-Ao executar pelo terminal, configure `JAVA_HOME` para o mesmo JDK selecionado no Android Studio. Depois de trocar o JDK, execute `.\gradlew.bat --stop` antes de rodar os comandos de compilação novamente.
-
-### Gerar um APK de teste
-
-No terminal do Android Studio, a partir da raiz do projeto:
+Para obter esta integração antes do merge:
 
 ```powershell
-.\gradlew.bat :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+git fetch origin
+git switch --track origin/codex/integracao-api
 ```
 
-No Linux/macOS:
+Se a branch já existe localmente, use `git switch codex/integracao-api` e `git pull`.
 
-```bash
-chmod +x gradlew
-./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
-```
+## O que está conectado
 
-Se a compilação concluir, o APK de desenvolvimento ficará em:
+- Cadastro, login de cliente e encerramento de sessão.
+- Cardápio, disponibilidade, fotos, grupos tradicionais/especiais, bordas, bebidas e combos cadastrados no painel.
+- Pizzas pequenas, médias e grandes; inteira ou dois sabores; preço do maior sabor e borda cadastrada.
+- Combos com composição inteira/meio a meio definida pela pizzaria e preço próprio, incluindo o desconto em relação aos avulsos.
+- Promoções por prazo ou quantidade: seleção na finalização e confirmação de disponibilidade pela API. O resumo informa o desconto e quantas pizzas receberam o benefício.
+- Sacola e favoritos persistidos; endereço de entrega salvo após a cotação; retirada sem endereço/taxa.
+- Cartão na maquininha ou dinheiro, incluindo cálculo de troco. Não há cobrança online.
+- Cotação emitida pela API, revisão explícita do valor e confirmação de envio.
+- Histórico paginado, acompanhamento de status e cancelamento antes do aceite da pizzaria.
+- Recuperação de envio interrompido sem gerar outra chave ou outro pedido.
 
-`app/build/outputs/apk/debug/app-debug.apk`
+O app não injeta produtos demonstrativos quando a API está vazia ou indisponível. As ilustrações de reserva indicam a categoria quando um produto ainda não tem foto.
 
-Para testes de interface, com aparelho ou emulador conectado:
+## Compilar e verificar
 
 ```powershell
-.\gradlew.bat :app:connectedDebugAndroidTest
+.\gradlew.bat :core:test :client:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-Para executar somente as regras sem instalar o SDK Android (ainda exige JDK completo 17 ou 21 e Internet na primeira vez):
+APK: `app/build/outputs/apk/debug/app-debug.apk`.
+
+Sem SDK Android, os testes JVM podem ser executados com:
 
 ```powershell
-.\gradlew.bat -PcoreOnly :core:test
+.\gradlew.bat -PcoreOnly :core:test :client:test
 ```
 
-Os scripts oficiais `gradlew`, `gradlew.bat` e o Wrapper JAR estão incluídos. O download do Gradle 8.10.2 possui checksum SHA-256 fixado. Não há chave de assinatura de produção no pacote.
+O workflow `Android integrado` compila o APK, executa os testes e o lint, sobe PostgreSQL 17 e a API e roda o fluxo em um emulador Android 35. Os relatórios e o APK ficam como artefatos da execução. O cenário de integração real é opt-in e usa apenas o banco isolado da CI; veja [docs/VERIFICACAO.md](docs/VERIFICACAO.md).
 
-## Roteiro de apresentação
+## Configuração de build
 
-1. Abra o cardápio e escolha **A Bonamassa**.
-2. Selecione **Família**, **Meio a meio → Frango cremoso**, borda e bacon.
-3. Escreva uma observação e adicione duas unidades.
-4. Na sacola, edite um item, altere a quantidade e aplique **BONA10**.
-5. Teste **Retirada** para ver o frete zerar; volte para **Entrega** se quiser demonstrar o formulário.
-6. Preencha dados fictícios. Experimente um telefone curto para ver a validação.
-7. Escolha **Dinheiro** e um valor de troco menor que o total; corrija depois.
-8. Confirme **Criar demonstração**. Use os botões **Simular** para avançar as etapas.
-9. Confira o histórico e **Pedir de novo**.
-10. Feche e reabra o app para verificar a persistência. No perfil, teste a limpeza com confirmação.
+O padrão debug usa o endereço do emulador e permite alterá-lo em Conta. Para definir os valores iniciais na compilação:
 
-## Onde mexer
+```powershell
+.\gradlew.bat :app:assembleDebug -PbonamassaApiUrl=http://192.168.1.10:3001 -PbonamassaStoreSlug=bonamassa
+```
 
-| O que alterar | Arquivo |
-|---|---|
-| Produtos, preços e ingredientes | `core/src/main/kotlin/br/com/bonamassa/core/Catalog.kt` |
-| Tamanhos, bordas, adicionais | `core/src/main/kotlin/br/com/bonamassa/core/Models.kt` |
-| Regra de sabores, entrega, cupom e validações | `core/src/main/kotlin/br/com/bonamassa/core/OrderRules.kt` |
-| Paleta e tipografia | `app/src/main/java/br/com/bonamassa/app/ui/Theme.kt` |
-| Previews no Android Studio | `app/src/main/java/br/com/bonamassa/app/ui/Previews.kt` |
-| Estado e ações do app | `app/src/main/java/br/com/bonamassa/app/BonamassaViewModel.kt` |
-| Persistência | `app/src/main/java/br/com/bonamassa/app/data/` |
+Uma configuração já salva no aparelho tem prioridade. Para trocar, saia da conta e use **Configurar API**. Um envio pendente precisa ser resolvido na conta/servidor originais antes de sair ou trocar de servidor.
 
-## Próxima etapa real
+Release exige HTTPS, não exibe configuração de servidor nem controles de demonstração. Configure a URL real no build, por exemplo `-PbonamassaApiUrl=https://api.seu-dominio.com.br`. Assinatura de produção e publicação na loja ainda precisam ser configuradas para o ambiente definitivo.
 
-Conectar uma API autenticada, validar cardápio oficial/área de entrega e implementar cobrança verificada no servidor. Painel da pizzaria, cozinha e entregador são módulos futuros, não fazem parte deste pacote.
+A demonstração offline anterior continua isolada e pode ser aberta explicitamente em debug:
 
-Veja `docs/INTEGRACAO.md` para as decisões pendentes e o contrato de integração sugerido. Veja `docs/VERIFICACAO.md` para o que foi efetivamente testado.
+```powershell
+.\gradlew.bat :app:assembleDebug -PbonamassaDemo=true
+```
 
-A logo fornecida pelo usuário foi mantida. Direitos sobre a marca e a logo permanecem com seus titulares.
-# BonamassaAndroid
+Ela usa seus próprios dados locais, não envia pedidos e continua identificada como demonstração. Nenhum carrinho, cupom ou histórico antigo da demo é migrado para a API.
+
+## Limites atuais
+
+Pix online, notificações push, GPS em tempo real, múltiplos endereços e edição/exclusão da conta não fazem parte desta integração. O status é consultado a cada 5 segundos com o app visível, ou 15 segundos após uma falha de conexão. Pedidos continuam no servidor quando o app está fechado.
+
+A API atual define a receita de cada combo no painel; o cliente escolhe a oferta pronta. Sabores e bordas de uma pizza avulsa são personalizáveis. Repetição automática de pedidos antigos não é exposta, pois o recibo histórico não inclui todos os identificadores necessários para reconstruir a receita com segurança.
+
+Contratos, persistência e regras de recuperação: [docs/INTEGRACAO.md](docs/INTEGRACAO.md).

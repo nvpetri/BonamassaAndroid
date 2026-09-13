@@ -28,6 +28,7 @@ class CustomerViewModel(application: Application) : AndroidViewModel(application
     val ui = _ui.asStateFlow()
     private var refreshJob: Job? = null
     private var epoch = 0
+    private var historyLoaded = false
     init { load() }
 
     fun endpoint(): Endpoint = Endpoint.parse(_ui.value.saved.origin, _ui.value.saved.slug, BuildConfig.DEBUG)
@@ -56,6 +57,7 @@ class CustomerViewModel(application: Application) : AndroidViewModel(application
         if (e is ApiFailure && e.status == 401 && token != null && _ui.value.saved.session?.accessToken == token) {
             change { it.copy(session = null) }
             epoch++
+            historyLoaded = false
             _ui.update { it.copy(orders = emptyList(), cursor = null, review = null, selectedOrder = null) }
         }
         _ui.update { it.copy(error = when (e) {
@@ -89,6 +91,7 @@ class CustomerViewModel(application: Application) : AndroidViewModel(application
         val destination = Endpoint.parse(origin, slug, true)
         change { SavedState(origin = destination.origin, slug = destination.storeSlug) }
         epoch++
+        historyLoaded = false
         _ui.update { it.copy(catalog = null, review = null, orders = emptyList(), cursor = null, selectedOrder = null, updatedAt = null) }
         refresh(force = true)
     }
@@ -103,6 +106,7 @@ class CustomerViewModel(application: Application) : AndroidViewModel(application
         try { change { it.signedIn(next) } }
         catch (e: Exception) { withContext(Dispatchers.IO) { runCatching { client.logout(next.accessToken) } }; throw e }
         epoch++
+        historyLoaded = false
         _ui.update { it.copy(orders = emptyList(), cursor = null, review = null, selectedOrder = null) }
         done()
         refresh(force = true)
@@ -113,6 +117,7 @@ class CustomerViewModel(application: Application) : AndroidViewModel(application
         val client = api()
         change { SavedState(origin = it.origin, slug = it.slug) }
         epoch++
+        historyLoaded = false
         _ui.update { it.copy(orders = emptyList(), cursor = null, review = null, selectedOrder = null) }
         if (old != null) withContext(Dispatchers.IO) { runCatching { client.logout(old.accessToken) } }
     }
@@ -195,6 +200,7 @@ class CustomerViewModel(application: Application) : AndroidViewModel(application
         val saved = _ui.value.saved
         val previouslyKnown = _ui.value.orders
         val selected = _ui.value.selectedOrder ?: saved.lastOrderId
+        val firstHistoryLoad = !historyLoaded
         val client = try { api() } catch (e: IllegalArgumentException) { _ui.update { it.copy(syncError = e.message) }; return }
         _ui.update { it.copy(refreshing = true) }
         refreshJob = viewModelScope.launch {
@@ -207,14 +213,29 @@ class CustomerViewModel(application: Application) : AndroidViewModel(application
                     val page = withContext(Dispatchers.IO) { client.orders(auth.accessToken) }
                     if (generation != epoch) return@launch
                     merge(page.items)
-                    // Preserve the load-more cursor after later pages have been loaded.
-                    _ui.update { it.copy(cursor = if (previouslyKnown.isEmpty()) page.nextCursor else it.cursor) }
+                    // The first page's cursor is independent of locally acknowledged orders.
+                    if (firstHistoryLoad || (page.nextCursor != null && previouslyKnown.none { old -> page.items.any { it.id == old.id } })) {
+                        _ui.update { it.copy(cursor = page.nextCursor) }
+                    }
+                    // Find older active orders even when the newest page is full of completed ones.
+                    if (firstHistoryLoad && page.nextCursor != null) {
+                        for (status in Status.entries.filter { it.active }) {
+                            var cursor: String? = null
+                            do {
+                                val active = withContext(Dispatchers.IO) { client.orders(auth.accessToken, cursor, status) }
+                                if (generation != epoch) return@launch
+                                merge(active.items)
+                                cursor = active.nextCursor
+                            } while (cursor != null)
+                        }
+                    }
                     val ids = (previouslyKnown.filter { it.status.active }.map { it.id } + listOfNotNull(selected)).distinct().filterNot { id -> page.items.any { it.id == id } }
                     for (id in ids) {
                         val order = withContext(Dispatchers.IO) { client.order(auth.accessToken, id) }
                         if (generation != epoch) return@launch
                         merge(listOf(order))
                     }
+                    historyLoaded = true
                 }
                 _ui.update { it.copy(syncError = null, updatedAt = System.currentTimeMillis()) }
             } catch (e: CancellationException) { throw e }

@@ -8,3 +8,4 @@ local.properties
 *.hprof
 .DS_Store
 _api/
+device-screenshots/

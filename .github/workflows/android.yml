@@ -39,6 +39,8 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
       - name: Compilar, testar e analisar Android
         run: bash gradlew :core:test :client:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
       - uses: actions/upload-artifact@v4
@@ -82,7 +84,7 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: bash gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.bonamassaIntegration=true --stacktrace
+          script: bash scripts/test-device.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -92,5 +94,6 @@ jobs:
             core/build/reports/
             client/build/reports/
             app/build/outputs/androidTest-results/
+            device-screenshots/
             ${{ runner.temp }}/api.log
           retention-days: 7

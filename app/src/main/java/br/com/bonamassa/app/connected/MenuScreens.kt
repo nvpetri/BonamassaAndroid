@@ -27,14 +27,12 @@ import br.com.bonamassa.app.R
 import br.com.bonamassa.app.ui.*
 import br.com.bonamassa.client.*
 import br.com.bonamassa.core.money
-import coil.ImageLoader
+import coil.imageLoader
 import coil.compose.SubcomposeAsyncImage
 
 @Composable
 private fun ProductPhoto(product: Product, endpoint: Endpoint, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val loader = remember(context) { ImageLoader.Builder(context).okHttpClient(BonamassaApi.newHttpClient()).build() }
-    DisposableEffect(loader) { onDispose { loader.shutdown() } }
     val placeholder: @Composable () -> Unit = {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -44,7 +42,7 @@ private fun ProductPhoto(product: Product, endpoint: Endpoint, modifier: Modifie
         }
     }
     Surface(modifier.clip(RoundedCornerShape(18.dp)), color = Brand.Raised) {
-        SubcomposeAsyncImage(model = endpoint.photo(product.photo), contentDescription = product.name, imageLoader = loader,
+        SubcomposeAsyncImage(model = endpoint.photo(product.photo), contentDescription = product.name, imageLoader = context.imageLoader,
             contentScale = ContentScale.Crop, loading = { placeholder() }, error = { placeholder() }, modifier = Modifier.fillMaxSize())
     }
 }
