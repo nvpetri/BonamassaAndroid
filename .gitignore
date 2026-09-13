@@ -7,3 +7,5 @@ local.properties
 *.keystore
 *.hprof
 .DS_Store
+_api/
+device-screenshots/

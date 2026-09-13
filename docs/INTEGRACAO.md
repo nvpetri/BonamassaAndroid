@@ -1,74 +1,80 @@
-# Integração e limites — Bonamassa Android 0.2.0
+# Integração do cliente Android 0.3.0
 
-## Estado atual
+Compatível com APIBonamassa `c9fcefad3827343a27abd5b0d14970a935b182b5`. O Android acessa a API REST diretamente. Painel e cozinha usam a mesma loja e os mesmos pedidos.
 
-Aplicativo cliente Android nativo, inteiramente offline. Não existe endpoint configurado, autenticação de usuário, pagamento real, cadastro remoto, painel da pizzaria ou aplicativo do motoboy neste pacote.
+## Código
 
-Todas as telas exibem o aviso de demonstração. A finalização pede confirmação explícita e cria somente um pedido local. O botão de avanço de status existe exclusivamente para apresentações; não deve existir em um cliente de produção.
-
-## Organização
-
-| Área | Responsabilidade |
+| Diretório | Responsabilidade |
 |---|---|
-| `core/Models.kt` | Modelos imutáveis e valores em centavos |
-| `core/Catalog.kt` | Produtos e preços demonstrativos |
-| `core/OrderRules.kt` | Preço, cupom, validação, status e criação de pedido |
-| `app/data/StateCodec.kt` | JSON versionado e snapshots de pedidos |
-| `app/data/LocalRepository.kt` | Persistência atômica com DataStore Preferences |
-| `app/BonamassaViewModel.kt` | Estado, ações e mensagens para a interface |
-| `app/ui/` | Compose, navegação, componentes e ilustrações nativas |
+| `client/` | Contratos REST, modelos, validação de rascunho, transporte HTTP, idempotência e codec persistente; testes JVM |
+| `app/connected/CustomerViewModel.kt` | Sessão, catálogo, sacola, cotação, envio, histórico e sincronização |
+| `app/connected/SecureStore.kt` | AES-GCM com chave no Android Keystore e escrita atômica em `noBackupFilesDir` |
+| `app/connected/*Screens.kt` | Telas Compose conectadas usando o tema/componentes Bonamassa |
+| `core/`, `app/data/`, `app/ui/` | Regras e telas da demo anterior; tema e componentes visuais compartilhados |
 
-O carrinho, favoritos, dados salvos e histórico sobrevivem ao fechamento e à recriação do processo. Rascunhos de formulários usam `rememberSaveable`, útil para rotação/recriação, mas só o botão **Salvar** ou a criação do pedido grava esses dados de forma durável. Até 50 linhas por sacola, 20 unidades por linha e 100 pedidos históricos. Uma exclusão de dados exige confirmação.
+A variante padrão abre `CustomerApp`. Só o debug com `-PbonamassaDemo=true` abre `BonamassaApp` (demo anterior). O release força a integração.
 
-## Decisões de demonstração (confirmar com a pizzaria)
+## Contratos utilizados
 
-- Pizza média: seis fatias, R$ 10,00 abaixo da grande.
-- Grande: oito fatias, valor base.
-- Família: doze fatias, R$ 14,00 acima da grande.
-- Dois sabores: utiliza o preço do mais caro; não soma as metades.
-- Até dois sabores salgados distintos; bebidas e sobremesas não aceitam personalizações de pizza.
-- Borda e adicionais cobrados por pizza inteira; a quantidade multiplica o conjunto completo.
-- Entrega: R$ 7,00 fixos. Retirada sem taxa. Sem validação geográfica da área atendida.
-- BONA10: 10% sobre produtos a partir de R$ 60,00, limitado a R$ 20,00; arredondado para baixo em centavos. Frete não participa do desconto.
-- Pix, cartão no recebimento e dinheiro são somente preferências locais, sem cobranças.
-- Pedido pode ser cancelado pelo cliente apenas no estado recebido nesta demonstração.
-- Valores, nomes dos produtos, ingredientes e ilustrações são exemplos, não um cardápio oficial confirmado.
-
-## O que falta para receber pedidos reais
-
-1. Validar cardápio, preços por tamanho, regra dos sabores, bordas, adicionais, horários, área de entrega e endereço oficial.
-2. Implementar uma API autenticada. O servidor deve validar disponibilidade, preços, cupom, frete e autorização em todas as operações; nunca aceitar o total do cliente como verdadeiro.
-3. A criação de pedidos precisa de chave de idempotência persistida antes do envio e usada novamente nos retries. A proteção local contra toques repetidos desta demo **não** substitui idempotência de rede.
-4. Usar um orçamento emitido pelo servidor com validade curta; revalidar preços e disponibilidade antes da confirmação.
-5. Integração de pagamentos exclusivamente no servidor, com segredo fora do APK, confirmação assinada por webhook, tratamento de duplicidade e reconciliação. Nunca marcar como pago por evento recebido apenas do aplicativo.
-6. Implementar autenticação, sessões e autorização por estabelecimento. Não usar um seletor local de perfil cliente/gerente/motoboy como segurança.
-7. Trocar o controle manual de status por atualizações autorizadas vindas da cozinha/expedição. WebSocket ou polling devem atualizar o repositório; reconsultar ao retornar ao primeiro plano.
-8. Definir retenção, consentimentos necessários, suporte, política de privacidade e exclusão de conta quando houver cadastro real.
-9. Antes de publicar, atualizar e verificar requisitos vigentes da Play Store, target SDK, assinatura e testes de dispositivos. Este target SDK 35 é uma base de desenvolvimento, não uma declaração de conformidade para publicação.
-
-## Contrato REST sugerido (ainda não implementado)
-
-| Método | Recurso | Responsabilidade |
+| Método | Endpoint | Uso |
 |---|---|---|
-| GET | `/v1/stores/{id}/catalog` | Cardápio e disponibilidade |
-| POST | `/v1/stores/{id}/quotes` | Orçamento validado, taxas e validade |
-| POST | `/v1/orders` | Criar a partir de quoteId + idempotency key |
-| GET | `/v1/orders/{id}` | Consultar um pedido autorizado |
-| POST | `/v1/orders/{id}/cancel` | Solicitar cancelamento sujeito à regra do servidor |
-| GET | `/v1/me/orders` | Histórico do usuário autenticado |
+| POST | `/v1/customers` | Cadastro e emissão de sessão |
+| POST | `/v1/sessions` | Login com `storeSlug`, e-mail e senha |
+| DELETE | `/v1/sessions/current` | Revogação da sessão |
+| GET | `/v1/stores/{slug}/catalog` | Produtos, regras, preços, promoções e loja aberta/fechada |
+| GET | `/v1/stores/{slug}/images/{id}` | Fotos públicas da loja |
+| POST | `/v1/orders/quote` | Cotação com itens, endereço, modalidade, pagamento, troco e promoção |
+| POST | `/v1/orders` | Confirmar `{quoteId}` com a chave de idempotência persistida |
+| GET | `/v1/me/orders` | Histórico com cursor e filtro de status |
+| GET | `/v1/orders/{id}` | Reconciliar o pedido exibido e pedidos ativos antigos |
+| POST | `/v1/orders/{id}/cancel` | Motivo + `expectedVersion`, somente antes do aceite |
 
-Não foi criado código de rede com URL fictícia. Adicionar a permissão INTERNET apenas ao implementar a API. Exigir HTTPS e nunca incluir chaves de gateway no código-fonte, recursos, BuildConfig ou APK.
+Tokens são enviados como Bearer apenas ao servidor configurado. Contas de funcionários são rejeitadas; a sessão emitida por esse login é revogada. Uma resposta 401 remove a sessão local e pede login novamente. A sacola e qualquer envio pendente permanecem vinculados ao cliente original.
 
-## Persistência e privacidade
+## Pedido e valores
 
-DataStore em armazenamento privado do app; não é um cofre criptográfico. Backup em nuvem e transferência estão excluídos no manifesto/regras. Não há analytics, GPS, contatos, SMS nem Internet. Prefira dados fictícios ao demonstrar. Dados ilegíveis causam uma tela de erro com tentativa de recarga; não são silenciosamente substituídos.
+Todos os valores são inteiros em centavos. A prévia local usa o preço mais alto dos sabores no tamanho escolhido, somando uma borda por pizza. Ela não autoriza nem finaliza a compra.
 
-O codec valida o schema e preços históricos sem recalculá-los. Antes de alterar o catálogo em uma versão futura, implemente migração de carrinhos e dos `sourceItems` dos pedidos; os IDs persistidos não podem simplesmente desaparecer. Para escala maior e múltiplos endereços, migrar para Room com migrations e testes.
+O app envia apenas identificadores, escolhas e quantidade. Não envia preço, frete, desconto, nome/telefone de cliente ou canal como autoridade. A API determina esses valores e obtém a identidade da sessão autenticada.
 
-## Referências da configuração
+A cotação contém um recibo com produtos, receita do combo, valores e promoção. O usuário revisa esse resultado antes de confirmar. Se preço, disponibilidade, cota promocional ou validade mudarem, a API pode recusar o envio. A sacola é mantida e o app exige outra cotação/revisão, sem aceitar um novo total silenciosamente.
 
-- [Compatibilidade do AGP 8.8: Gradle 8.10.2, JDK 17 e API 35](https://developer.android.com/build/releases/agp-8-8-0-release-notes)
-- [Plugin do compilador Compose](https://developer.android.com/develop/ui/compose/setup-compose-dependencies-and-compiler)
-- [Checksums oficiais do Gradle](https://gradle.org/release-checksums/)
+Pizzas: `SMALL`, `MEDIUM`, `LARGE`; um ou dois sabores distintos; borda `NONE` ou ID do produto de borda. Não há tamanho família ou adicionais fictícios no modo conectado. Bebidas não recebem campos de pizza. Combos enviam o ID da oferta, quantidade e observação: a receita e o preço são definidos pela pizzaria.
 
-Dependências fixadas para uma base conhecida; não são uma promessa de versões mais recentes. Atualizações devem passar novamente pelos testes.
+Promoções por tempo/cota são selecionadas por ID real; não se usa o cupom BONA10 da demo. O benefício vale para a base das pizzas elegíveis, limitado à cota disponível. Bordas, bebidas, combos e frete ficam fora. A confirmação final reserva a cota no servidor.
+
+Entrega exige rua, número, bairro, cidade, UF e CEP. Retirada envia `address: null`. Cartão envia `cashTendered: null`; dinheiro sem valor significa sem troco. O app não gera Pix, processa cartão nem marca um pagamento como recebido.
+
+## Persistência e recuperação
+
+Um arquivo versionado contém sessão, conta, carrinho, endereço, favoritos e comando pendente. Ele é criptografado com AES-256-GCM e uma chave não exportável do Android Keystore. Cada gravação usa um IV novo gerado pelo provedor e `AtomicFile`. Senhas não são persistidas. Backup e transferência de dados do app ficam desabilitados.
+
+Antes de enviar um pedido/cancelamento, o app grava atomicamente:
+
+- caminho e corpo originais;
+- chave UUID de idempotência;
+- ID do cliente, ID da loja e origem da API.
+
+Enquanto esse comando não tiver resultado confirmado, a sacola, o checkout, a troca de servidor e a saída da conta ficam bloqueados. **Verificar envio** repete exatamente corpo e chave originais. Fechar ou recriar o app não cria uma nova tentativa comercial.
+
+Uma resposta de sucesso limpa o pendente e, para criação de pedido, a sacola, na mesma gravação. Se essa gravação falhar depois do sucesso remoto, o comando original continua salvo e pode ser repetido com segurança. Respostas ambíguas (rede, timeout, 429, 5xx, resposta inválida) preservam o pendente. Em 401, é necessário autenticar novamente na mesma conta. Uma rejeição definitiva de negócio limpa o comando, preserva a sacola e descarta a cotação.
+
+Dados locais ilegíveis nunca são substituídos automaticamente. A tela permite tentar carregá-los novamente. Não remova os dados do app para resolver um envio ambíguo: consulte primeiro os pedidos da conta/pizzaria.
+
+## Atualização de status
+
+Enquanto a Activity está visível, o app atualiza o catálogo e os pedidos a cada 5 segundos; após falha, o intervalo é de 15 segundos. Ao sair do primeiro plano, o polling é cancelado; ao retornar, ocorre uma consulta. Não há serviço em segundo plano nem simulação de status.
+
+O histórico mantém páginas anteriores e usa versões para impedir regressão quando uma consulta antiga chega depois de outra. Pedidos ativos já conhecidos e o pedido selecionado são consultados individualmente quando saem da primeira página. Na primeira carga com histórico paginado, também são buscados os pedidos ativos mais antigos.
+
+São tratados `NEW`, `CONFIRMED`, `PREPARING`, `READY`, `OUT_FOR_DELIVERY`, `RETURNING`, `DELIVERED`, `RETURNED` e `CANCELLED`. Uma devolução nunca aparece como entrega concluída. O pagamento exibido também vem do servidor.
+
+## Transporte e ambiente
+
+A URL aceita somente uma origem HTTP(S), sem usuário/senha, caminho, query ou fragmento. Release exige HTTPS; apenas o manifesto debug libera HTTP para desenvolvimento na rede local. Não há trust manager permissivo, credencial fixa nem bypass de TLS.
+
+O transporte recusa redirects e desativa repetição automática de envios. Consultas GET podem recuperar conexões interrompidas; conexões ociosas são encerradas em 2 segundos para evitar reutilizar sockets fechados pela API. As fotos são públicas e aceitas somente em caminhos de imagens da loja configurada; elas não recebem token. O HTTP client não instala logger de credenciais, corpo ou dados pessoais.
+
+A preparação do release exige URL HTTPS e assinatura do ambiente de produção. A versão de SDK e as políticas de publicação deverão ser revistas ao preparar a entrega pela Play Store.
+
+Referências de implementação: [Android Keystore](https://developer.android.com/privacy-and-security/keystore), [criptografia Android](https://developer.android.com/privacy-and-security/cryptography) e [emulador na CI](https://github.com/ReactiveCircus/android-emulator-runner).

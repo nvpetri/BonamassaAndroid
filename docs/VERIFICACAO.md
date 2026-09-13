@@ -1,65 +1,50 @@
-# Verificação — 12/09/2026
+# Verificação — cliente Android integrado
 
-## Resultado efetivamente obtido
+## Comandos
 
-| Verificação | Resultado |
-|---|---|
-| Compilação isolada do módulo de regras e codec JSON | Concluída com Kotlin 2.0.21, alvo JVM 17 |
-| Regras de negócio (JUnit 4.13.2) | 30 testes aprovados |
-| Serialização e validação de dados locais (JUnit) | 6 testes aprovados |
-| Sintaxe dos arquivos Kotlin | 18 arquivos analisados via parser PSI, sem erros de sintaxe |
-| Gradle Wrapper | Gerado pelo Gradle 8.10.2; JAR e distribuição conferidos por SHA-256 oficial |
-| Sintaxe do script gradlew | Validada com bash -n |
-| XML de recursos e manifesto | Parsing e referências locais conferidos |
-| Compilação do aplicativo Android | Não concluída neste ambiente |
-| Android Lint | Não executado |
-| Testes de interface | 3 implementados, não executados |
-| Validação visual em emulador/aparelho | Pendente |
-| APK instalável | Não gerado |
-
-Saída da execução dos testes JVM:
-
-```text
-JUnit version 4.13.2
-....................................
-OK (36 tests)
+```powershell
+.\gradlew.bat :core:test :client:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-A execução inicial foi feita diretamente com o compilador Kotlin e o runner JUnit, usando as classes reais de produção de `core` e `StateCodec`, não uma reimplementação das regras em outra linguagem. Naquela configuração, o módulo `core` exigia um JDK completo 17; o ambiente disponível possuía somente runtime Java 17 e não possuía SDK Android. A tentativa inicial com Gradle encontrou ausência de toolchain Java de compilação. Por isso não foi concluído o ciclo Gradle/Android.
+Os testes `client` cobrem payloads reais, cálculo de prévia, dinheiro em centavos, validação de endereço, itens/quantidades, isolamento de contas/servidores, persistência de pendentes, classificação de falhas, cabeçalhos HTTP, redirects e rejeição de login de funcionários. `core` e os testes de codec/UI existentes continuam verificando a demonstração isolada.
 
-A análise de sintaxe não é uma compilação Android: não confirma resolução de APIs Compose, recursos via AAPT, lint ou comportamento visual. Os testes do codec verificam serialização e snapshots; não equivalem a testar DataStore em um dispositivo. Não afirmar que o app está homologado para uso real com base nestes resultados.
+## Fluxo com API real
 
-## Cobertura dos 36 testes
+O workflow `.github/workflows/android.yml`:
 
-Preço pelo maior sabor; tamanho; borda; extras por pizza inteira; preço de bebidas; rejeição de misturas/tamanhos inválidos; quantidade e observação; sacola vazia; frete e retirada; mínimo e teto do cupom; entrada monetária decimal; nome/telefone/endereço; valor de troco; progressão de status de entrega e retirada; bloqueio de estados terminais; snapshot de pedido; limpeza da sacola; proteção contra nova criação com sacola já esvaziada; limite de linhas; ida e volta de JSON; schema desconhecido; dados inválidos.
+1. Compila com JDK 17, SDK 35 e Gradle Wrapper com checksum.
+2. Executa testes JVM, lint e gera APK debug + APK de instrumentação.
+3. Sobe PostgreSQL 17, baixa a versão fixa da API, aplica migrações e seed em um banco de teste exclusivo.
+4. Executa um emulador Android 35 com acesso à API por `10.0.2.2:3001`.
+5. Testa cadastro na UI, pizza meio a meio com borda, endereço, dinheiro/troco e promoção; compara valores persistidos pela API.
+6. Confirma na UI as mudanças de aceite, cozinha, saída e conclusão da entrega feitas pelos endpoints autorizados usados pelos outros aplicativos.
+7. Verifica combo com preço próprio, reabertura do app com envio pendente e recuperação sem duplicidade, cancelamento, isolamento entre clientes e revogação de sessão.
+8. Publica relatórios de teste e APK como artefatos da execução.
 
-## Correção da seleção do JDK — 12/09/2026
+As chamadas de gestor e entregador existem somente no código de instrumentação e usam contas descartáveis da CI. Não estão no APK do cliente. As senhas de CI não são configurações de produção.
 
-O módulo `core` passou a usar o JDK escolhido para executar o Gradle, com os alvos Java e Kotlin definidos explicitamente como 17. A exigência de uma instalação separada via `jvmToolchain(17)` foi removida. As instruções de abertura agora orientam a seleção de um JDK completo 17 ou 21.
+O teste real é **opt-in**: `CustomerApiFlowTest` é ignorado se o argumento `bonamassaIntegration=true` não estiver presente. Para executá-lo manualmente, prepare uma API e banco isolados com exatamente as credenciais/seed do workflow e um emulador:
 
-A configuração corrigida foi verificada com **Gradle 8.10.2 e Temurin JDK 21.0.12.1**, executando `-PcoreOnly :core:test`:
+```powershell
+.\gradlew.bat :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.bonamassaIntegration=true
+```
 
-- `BUILD SUCCESSFUL`; 30 testes de regras aprovados, sem falhas ou erros.
-- As 20 classes de produção geradas foram inspecionadas: todas têm major version 61, correspondente ao bytecode Java 17.
-- A execução usou o JDK 21 sem provisionar outro JDK 17 para o módulo `core`.
+Não aponte esse cenário para uma loja em operação.
 
-Essa verificação adicional cobre a compilação e os testes do módulo `core`. O SDK Android continua ausente neste ambiente: a compilação do app, os testes do módulo `app`, lint e emulador permanecem pendentes pelo Gradle. Os resultados anteriores do codec são da execução isolada descrita acima.
+## Conferência na pizzaria
 
-Referências: [JDK e alvo de compilação no Gradle](https://docs.gradle.org/8.10.2/userguide/toolchains.html), [opções de compilação do Kotlin](https://kotlinlang.org/docs/gradle-compiler-options.html).
+- Conectar celular físico à API do PC e cadastrar uma conta de cliente.
+- Criar/editar sabor e foto no painel; conferir atualização no app.
+- Pausar produto ou fechar loja; confirmar que pedidos indisponíveis são recusados.
+- Pedir uma pizza inteira e outra meio a meio com borda; revisar o valor calculado pela API.
+- Pedir o combo cadastrado no painel e conferir composição e preço promocional.
+- Selecionar promoção com prazo/cota; conferir quantidade de pizzas beneficiadas no resumo.
+- Testar entrega com CEP/UF, retirada, cartão na entrega e dinheiro/troco.
+- Enviar pedido, acompanhar no painel/cozinha e observar status no app.
+- Cancelar antes do aceite; depois do aceite, o app orienta a falar com a loja.
+- Desconectar/reconectar a rede durante consulta e envio; usar **Verificar envio** quando necessário e conferir que existe um único pedido.
+- Fechar e reabrir o app; conferir sessão, sacola e histórico da conta.
 
-## Checklist obrigatório no Android Studio antes de apresentar
+## Escopo da evidência
 
-- Rodar `:core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`.
-- Executar `:app:connectedDebugAndroidTest` em emulador ou celular.
-- Verificar telas em 360 dp, 390 dp e tablet; fonte padrão e ampliada.
-- Validar barras do sistema, teclado aberto, rotação e botão Voltar do Android.
-- Validar que Adicionar mais itens retorna ao cardápio e não restaura uma sacola antiga.
-- Personalizar pizza com dois sabores, editar depois e conferir os valores exatos.
-- Testar Pix/dinheiro/cartão de demonstração; garantir que não aparece confirmação de pagamento real.
-- Confirmar persistência após fechar o app/encerrar o processo e abrir novamente.
-- Verificar perfil e endereço sem usar dados pessoais reais.
-- Verificar tela de erro e confirmação de apagar os dados.
-- Verificar que a retirada não tem taxa nem etapa de entregador.
-- Conferir os avisos de demonstração em todo o percurso.
-
-As funções externas descritas em `INTEGRACAO.md` continuam pendentes. Este pacote não configura infraestrutura, não publica app e não envia dados à pizzaria.
+A CI exercita Android 35 e o backend real com PostgreSQL; ela não substitui a homologação no celular do usuário e na rede da pizzaria. GPS, push e pagamento online não fazem parte deste teste nem desta integração. A evidência de cada execução está nos relatórios da aba Actions deste repositório.

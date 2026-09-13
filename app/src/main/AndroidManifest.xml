@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Offline demo: no network, payment, location or tracking permissions. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <application
+        android:name=".BonamassaApplication"
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:usesCleartextTraffic="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
-        android:label="Bonamassa Demo"
+        android:label="Bonamassa"
         android:theme="@style/Theme.Bonamassa">
         <activity
             android:name=".MainActivity"
