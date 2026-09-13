@@ -13,7 +13,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import br.com.bonamassa.app.BuildConfig
 import br.com.bonamassa.app.ui.*
 import br.com.bonamassa.client.*
 import br.com.bonamassa.core.money
@@ -98,7 +97,7 @@ fun ConnectedOrder(ui: CustomerUi, order: Order?, refresh: () -> Unit, cancel: (
 }
 
 @Composable
-fun ConnectedProfile(ui: CustomerUi, login: () -> Unit, logout: () -> Unit, configure: () -> Unit) {
+fun ConnectedProfile(ui: CustomerUi, login: () -> Unit, logout: () -> Unit) {
     var leaving by rememberSaveable { mutableStateOf(false) }
     if (leaving) AlertDialog(onDismissRequest = { leaving = false }, title = { Text("Sair desta conta?") }, text = { Text("Os dados da conta e a sacola serão removidos deste aparelho. Seus pedidos continuam salvos na pizzaria.") },
         confirmButton = { TextButton(onClick = { leaving = false; logout() }) { Text("Sair") } }, dismissButton = { TextButton(onClick = { leaving = false }) { Text("Continuar") } })
@@ -113,29 +112,5 @@ fun ConnectedProfile(ui: CustomerUi, login: () -> Unit, logout: () -> Unit, conf
             if (ui.saved.checkout.address.street.isNotBlank()) Panel { Text("Último endereço usado", style = MaterialTheme.typography.titleMedium); Text(ui.saved.checkout.address.summary()); Text("Você pode alterá-lo ao finalizar o próximo pedido.", color = Brand.Muted) }
             OutlinedButton(onClick = { leaving = true }, enabled = !ui.busy && ui.saved.pending == null, modifier = Modifier.fillMaxWidth()) { Text("Sair da conta") }
         }
-        if (BuildConfig.DEBUG) Panel {
-            Text("Conexão para testes", style = MaterialTheme.typography.titleMedium)
-            Text("${ui.saved.origin}\nLoja: ${ui.saved.slug}", color = Brand.Muted)
-            Text("No celular físico, use o IPv4 do PC na mesma rede Wi-Fi. No emulador, use 10.0.2.2.", style = MaterialTheme.typography.bodySmall)
-            OutlinedButton(onClick = configure, enabled = !ui.busy && ui.saved.pending == null && ui.saved.session == null) { Text("Configurar API") }
-            if (ui.saved.session != null) Text("Saia da conta para trocar de servidor.", style = MaterialTheme.typography.bodySmall)
-        }
     }
-}
-@Composable
-fun ConnectionDialog(ui: CustomerUi, dismiss: () -> Unit, save: (String, String) -> Unit) {
-    var url by rememberSaveable { mutableStateOf(ui.saved.origin) }
-    var slug by rememberSaveable { mutableStateOf(ui.saved.slug) }
-    var error by remember { mutableStateOf<String?>(null) }
-    AlertDialog(onDismissRequest = dismiss, title = { Text("Conectar à API") }, text = {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Use http://IP-DO-PC:3001, sem /v1. No emulador: http://10.0.2.2:3001.")
-            Input("Endereço da API", url, { url = it })
-            Input("Identificador da loja", slug, { slug = it })
-            error?.let { Text(it, color = Brand.Red) }
-        }
-    }, confirmButton = { TextButton(onClick = {
-        try { val endpoint = Endpoint.parse(url, slug, true); save(endpoint.origin, endpoint.storeSlug) }
-        catch (e: IllegalArgumentException) { error = e.message }
-    }, enabled = !ui.busy && ui.saved.pending == null && ui.saved.session == null) { Text("Salvar conexão") } }, dismissButton = { TextButton(onClick = dismiss) { Text("Voltar") } })
 }

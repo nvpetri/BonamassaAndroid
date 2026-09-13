@@ -39,8 +39,19 @@ class CustomerViewModel(application: Application) : AndroidViewModel(application
         _ui.update { it.copy(busy = true, fatal = false) }
         viewModelScope.launch {
             try {
-                val saved = withContext(Dispatchers.IO) { store.read() } ?: SavedState(
-                    origin = BuildConfig.API_URL.ifBlank { if (BuildConfig.DEBUG) "http://10.0.2.2:3001" else "" }, slug = BuildConfig.STORE_SLUG)
+                val configured = Endpoint.parse(
+                    BuildConfig.API_URL.ifBlank { if (BuildConfig.DEBUG) "http://10.0.2.2:3001" else "" },
+                    BuildConfig.STORE_SLUG,
+                    BuildConfig.DEBUG
+                )
+                val stored = withContext(Dispatchers.IO) { store.read() }
+                val saved = when {
+                    stored == null -> SavedState(origin = configured.origin, slug = configured.storeSlug)
+                    stored.origin == configured.origin && stored.slug == configured.storeSlug -> stored
+                    stored.pending != null -> stored
+                    else -> SavedState(origin = configured.origin, slug = configured.storeSlug)
+                }
+                if (saved !== stored) withContext(Dispatchers.IO) { store.write(saved) }
                 _ui.update { it.copy(saved = saved, loaded = true, busy = false) }
                 refresh()
             } catch (e: CancellationException) { throw e }
@@ -83,17 +94,6 @@ class CustomerViewModel(application: Application) : AndroidViewModel(application
             val all = (s.orders + orders).groupBy { it.id }.values.map { versions -> versions.maxBy { it.version } }.sortedByDescending { it.number }
             s.copy(orders = all)
         }
-    }
-    fun configure(origin: String, slug: String) = action {
-        check(BuildConfig.DEBUG)
-        editable()
-        require(_ui.value.saved.session == null) { "Saia da conta antes de trocar de servidor." }
-        val destination = Endpoint.parse(origin, slug, true)
-        change { SavedState(origin = destination.origin, slug = destination.storeSlug) }
-        epoch++
-        historyLoaded = false
-        _ui.update { it.copy(catalog = null, review = null, orders = emptyList(), cursor = null, selectedOrder = null, updatedAt = null) }
-        refresh(force = true)
     }
     fun signIn(email: String, password: String, name: String?, phone: String?, done: () -> Unit) = action {
         require(email.trim().isNotEmpty() && password.isNotEmpty()) { "Informe e-mail e senha." }
