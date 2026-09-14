@@ -81,3 +81,7 @@ Pix online, notificações push, GPS em tempo real, múltiplos endereços e edi�
 A API atual define a receita de cada combo no painel; o cliente escolhe a oferta pronta. Sabores e bordas de uma pizza avulsa são personalizáveis. Repetição automática de pedidos antigos não é exposta, pois o recibo histórico não inclui todos os identificadores necessários para reconstruir a receita com segurança.
 
 Contratos, persistência e regras de recuperação: [docs/INTEGRACAO.md](docs/INTEGRACAO.md).
+
+## Preparação para produção
+
+Leia [docs/PRODUCAO.md](docs/PRODUCAO.md) antes de distribuir o aplicativo. O release agora valida HTTPS e recusa flags demo/integração. Compilar não assina nem publica: o guia explica servidor definitivo, assinatura, atualização segura e testes em aparelho real.
