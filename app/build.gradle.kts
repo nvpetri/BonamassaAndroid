@@ -70,3 +70,29 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
 }
+
+val verifyReleaseConfiguration by tasks.registering {
+    group = "verification"
+    description = "Recusa release com HTTP, endpoint inválido ou flags de teste/demo."
+    val apiUrl = providers.gradleProperty("bonamassaApiUrl").orElse("")
+    val demo = providers.gradleProperty("bonamassaDemo").orElse("false")
+    val integration = providers.gradleProperty("bonamassaIntegration").orElse("false")
+    inputs.property("apiUrl", apiUrl)
+    inputs.property("demo", demo)
+    inputs.property("integration", integration)
+    doLast {
+        val endpoint = runCatching { java.net.URI(apiUrl.get()) }.getOrNull()
+        require(endpoint != null && endpoint.scheme == "https" && !endpoint.host.isNullOrBlank() &&
+            endpoint.rawUserInfo == null && endpoint.rawQuery == null && endpoint.rawFragment == null &&
+            (endpoint.rawPath.isNullOrEmpty() || endpoint.rawPath == "/")) {
+            "Release requer uma origem HTTPS válida, sem caminho, credenciais ou parâmetros."
+        }
+        require(demo.get() == "false" && integration.get() == "false") {
+            "Release não permite bonamassaDemo ou bonamassaIntegration."
+        }
+    }
+}
+
+tasks.configureEach {
+    if (name == "preReleaseBuild") dependsOn(verifyReleaseConfiguration)
+}
