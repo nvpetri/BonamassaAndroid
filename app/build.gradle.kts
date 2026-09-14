@@ -1,3 +1,5 @@
+import java.net.URI
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -81,7 +83,7 @@ val verifyReleaseConfiguration by tasks.registering {
     inputs.property("demo", demo)
     inputs.property("integration", integration)
     doLast {
-        val endpoint = runCatching { java.net.URI(apiUrl.get()) }.getOrNull()
+        val endpoint = runCatching { URI(apiUrl.get()) }.getOrNull()
         require(endpoint != null && endpoint.scheme == "https" && !endpoint.host.isNullOrBlank() &&
             endpoint.rawUserInfo == null && endpoint.rawQuery == null && endpoint.rawFragment == null &&
             (endpoint.rawPath.isNullOrEmpty() || endpoint.rawPath == "/")) {
