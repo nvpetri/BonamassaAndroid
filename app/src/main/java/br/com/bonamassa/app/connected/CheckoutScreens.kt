@@ -1,6 +1,7 @@
 package br.com.bonamassa.app.connected
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -12,12 +13,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import br.com.bonamassa.app.ui.*
 import br.com.bonamassa.client.*
 import br.com.bonamassa.core.money
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 @Composable
 fun AuthScreen(busy: Boolean, initialEmail: String, submit: (String, String, String?, String?) -> Unit) {
@@ -83,12 +90,14 @@ fun ConnectedCart(ui: CustomerUi, quantity: (String, Int) -> Unit, remove: (Stri
                 }
             }
         }
+        OutlinedButton(onClick = menu, enabled = editable, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) { Text("Continuar comprando") }
         BottomAction(if (ui.saved.session == null) "Entrar para continuar" else if (ui.catalog?.open == false) "Continuar reserva" else "Continuar pedido", enabled = editable && estimated != null && ui.catalog?.canOrder == true, onClick = checkout)
     }
 }
 
 @Composable
-fun ConnectedCheckout(ui: CustomerUi, submit: (Checkout) -> Unit) {
+fun ConnectedCheckout(ui: CustomerUi, postalLookup: PostalCodeLookup? = null, submit: (Checkout) -> Unit) {
+    val lookup = postalLookup ?: remember { ViaCepLookup() }
     val initial = ui.saved.checkout
     var mode by rememberSaveable { mutableStateOf(initial.mode) }
     var payment by rememberSaveable { mutableStateOf(initial.payment) }
@@ -99,9 +108,38 @@ fun ConnectedCheckout(ui: CustomerUi, submit: (Checkout) -> Unit) {
     var state by rememberSaveable { mutableStateOf(initial.address.state) }
     var cep by rememberSaveable { mutableStateOf(initial.address.postalCode) }
     var reference by rememberSaveable { mutableStateOf(initial.address.reference) }
+    var complement by rememberSaveable { mutableStateOf(initial.address.complement) }
+    var noComplement by rememberSaveable { mutableStateOf(initial.address.noComplement) }
+    var lookupNeeded by rememberSaveable { mutableStateOf(false) }
+    var attempt by remember { mutableIntStateOf(0) }
+    var manualRevision by remember { mutableIntStateOf(0) }
+    var lookingUp by remember { mutableStateOf(false) }
+    var cepMessage by remember { mutableStateOf<String?>(null) }
     var cash by rememberSaveable { mutableStateOf(initial.cash) }
     var note by rememberSaveable { mutableStateOf(initial.note) }
     var promotion by rememberSaveable { mutableStateOf(initial.promotionId) }
+    LaunchedEffect(cep, mode, lookupNeeded, attempt) {
+        lookingUp = false
+        if (mode != Mode.DELIVERY || !lookupNeeded || cep.length != 8) return@LaunchedEffect
+        val revision = manualRevision
+        lookingUp = true
+        cepMessage = null
+        try {
+            delay(400)
+            val found = withContext(Dispatchers.IO) { lookup.lookup(cep) }
+            // A cancelled lookup or a manual edit must never replace newer address data.
+            if (revision == manualRevision) {
+                street = found.street; neighborhood = found.neighborhood; city = found.city; state = found.state
+                cepMessage = if (street.isBlank() || neighborhood.isBlank()) "CEP localizado. Complete a rua e o bairro que faltam."
+                    else "Endereço preenchido. Confira os dados e informe o número."
+            } else cepMessage = "Consulta concluída. Mantivemos o endereço que você editou."
+        } catch (e: CancellationException) { throw e }
+        catch (_: PostalCodeNotFound) { cepMessage = "CEP não encontrado. Confira os números ou preencha manualmente." }
+        catch (_: Exception) { cepMessage = "Não foi possível consultar o CEP. Tente novamente ou preencha manualmente." }
+        finally { lookingUp = false }
+    }
+    val address = Address(street, number, neighborhood, city, state, cep, reference, complement, noComplement)
+    val validAddress = mode == Mode.PICKUP || runCatching { address.validate() }.isSuccess
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             if (ui.catalog?.open == false) ReservationNotice(ui.catalog)
@@ -110,15 +148,33 @@ fun ConnectedCheckout(ui: CustomerUi, submit: (Checkout) -> Unit) {
             ui.saved.session?.user?.let { Text("Pedido de ${it.name} · ${it.phone}", color = Brand.Muted) }
             if (mode == Mode.DELIVERY) {
                 SectionHeading("Onde vamos entregar?")
-                Input("Rua", street, { street = it.take(120) })
-                Input("Número", number, { number = it.take(20) })
-                Input("Bairro", neighborhood, { neighborhood = it.take(80) })
-                Input("Cidade", city, { city = it.take(80) })
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Input("UF", state, { state = it.uppercase().take(2) }, Modifier.weight(1f))
-                    Input("CEP", cep, { cep = it.filter(Char::isDigit).take(8) }, Modifier.weight(2f), type = KeyboardType.Number)
+                Input("CEP", cep, { value ->
+                    val next = value.filter { it in '0'..'9' }.take(8)
+                    if (next != cep) {
+                        cep = next; lookupNeeded = true; cepMessage = null
+                        street = ""; neighborhood = ""; city = ""; state = ""
+                        number = ""; complement = ""; noComplement = false; reference = ""
+                    }
+                }, type = KeyboardType.Number)
+                if (lookingUp) Text("Consultando CEP…", color = Brand.Gold)
+                cepMessage?.let { Text(it, color = Brand.Muted) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { lookupNeeded = true; attempt++ }, enabled = cep.length == 8 && !lookingUp) { Text("Consultar CEP") }
+                    TextButton(onClick = { lookupNeeded = false; cepMessage = "Preencha e confira o endereço abaixo." }) { Text("Preencher manualmente") }
                 }
-                Input("Complemento ou referência", reference, { reference = it.take(240) }, singleLine = false)
+                Input("Rua", street, { manualRevision++; street = it.take(120) })
+                OutlinedTextField(number, { number = it.take(20) }, Modifier.fillMaxWidth(), label = { Text("Número") },
+                    supportingText = { Text("Obrigatório") }, singleLine = true, isError = number.isBlank())
+                Row(Modifier.fillMaxWidth().toggleable(noComplement, role = Role.Checkbox) { noComplement = it; if (it) complement = "" }, verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(noComplement, null)
+                    Text("Não possui complemento")
+                }
+                OutlinedTextField(complement, { complement = it.take(240) }, Modifier.fillMaxWidth(), label = { Text("Complemento (opcional)") },
+                    supportingText = { Text("Apartamento, bloco ou casa dos fundos") }, enabled = !noComplement)
+                Input("Bairro", neighborhood, { manualRevision++; neighborhood = it.take(80) })
+                Input("Cidade", city, { manualRevision++; city = it.take(80) })
+                Input("UF", state, { manualRevision++; state = it.uppercase().take(2) })
+                Input("Ponto de referência (opcional)", reference, { reference = it.take(240) }, singleLine = false)
             }
             SectionHeading("Pagamento no recebimento")
             OptionRow(Method.CARD.label, "Leve o cartão para usar na maquininha", payment == Method.CARD, { payment = Method.CARD })
@@ -133,8 +189,8 @@ fun ConnectedCheckout(ui: CustomerUi, submit: (Checkout) -> Unit) {
             Text("Descontos não incluem bordas, bebidas, combos ou entrega. A cotação mostra quantas pizzas receberam o benefício.", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
             Input("Observações do pedido", note, { note = it.take(240) }, singleLine = false)
         }
-        BottomAction("Conferir valores", enabled = !ui.busy && ui.saved.pending == null && ui.catalog?.canOrder == true) {
-            submit(Checkout(mode, Address(street, number, neighborhood, city, state, cep, reference), payment, cash, note, promotion))
+        BottomAction("Conferir valores", enabled = !ui.busy && !lookingUp && validAddress && ui.saved.pending == null && ui.catalog?.canOrder == true) {
+            submit(Checkout(mode, address, payment, cash, note, promotion))
         }
     }
 }
@@ -163,12 +219,18 @@ fun Receipt(lines: List<ReceiptLine>) {
     }
 }
 @Composable
-fun ConnectedReview(ui: CustomerUi, back: () -> Unit, confirm: () -> Unit) {
+fun ConnectedReview(ui: CustomerUi, back: () -> Unit, confirm: () -> Unit, shop: (() -> Unit)? = null) {
+    var confirming by remember { mutableStateOf(false) }
     val review = ui.review
     if (review == null) {
         EmptyState("Confira os valores novamente", "A sacola foi mantida. Atualize a cotação para continuar.", Icons.Default.ReceiptLong, "Voltar ao pedido", back)
         return
     }
+    val canConfirm = !ui.busy && ui.saved.pending == null && ui.saved.session != null
+    if (confirming) AlertDialog(onDismissRequest = { confirming = false }, title = { Text("Deseja enviar este pedido?") },
+        text = { Text("${review.quote.items.sumOf { it.quantity }} produto(s) · Total ${money(review.quote.totals.total)}, incluindo ${money(review.quote.totals.fee)} de entrega.\n\nSe quiser adicionar mais produtos, continue comprando antes de enviar. Depois do envio, uma nova compra gera outro pedido e outra taxa de entrega quando aplicável.") },
+        confirmButton = { TextButton(onClick = { confirming = false; confirm() }, enabled = canConfirm) { Text(if (review.quote.scheduledFor != null) "Sim, agendar pedido" else "Sim, enviar pedido") } },
+        dismissButton = { TextButton(onClick = { confirming = false; shop?.invoke() }, enabled = canConfirm) { Text(if (shop != null) "Adicionar mais produtos" else "Voltar à revisão") } })
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Tag("VALORES CONFIRMADOS PELA PIZZARIA", Brand.Green)
@@ -188,8 +250,9 @@ fun ConnectedReview(ui: CustomerUi, back: () -> Unit, confirm: () -> Unit) {
             }
             Text(if (review.quote.scheduledFor != null) "Ao confirmar, sua reserva ficará agendada. O pagamento será no recebimento." else "Ao confirmar, o pedido será enviado à pizzaria. O pagamento será no recebimento.", color = Brand.Muted)
             TextButton(onClick = back, enabled = !ui.busy && ui.saved.pending == null) { Text("Alterar pedido") }
+            if (shop != null) OutlinedButton(onClick = shop, enabled = canConfirm, modifier = Modifier.fillMaxWidth()) { Text("Adicionar mais produtos") }
         }
-        BottomAction(if (review.quote.scheduledFor != null) "Confirmar agendamento" else "Confirmar e enviar pedido", money(review.quote.totals.total), !ui.busy && ui.saved.pending == null && ui.saved.session != null, confirm)
+        BottomAction(if (review.quote.scheduledFor != null) "Confirmar agendamento" else "Confirmar e enviar pedido", money(review.quote.totals.total), canConfirm) { confirming = true }
     }
 }
 

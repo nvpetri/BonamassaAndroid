@@ -39,7 +39,10 @@ class CustomerApiFlowTest {
             "startsAt" to Instant.now().minusSeconds(60).toString(), "endsAt" to Instant.now().plusSeconds(3600).toString(), "pizzaLimit" to 20), UUID.randomUUID().toString())
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val secure = SecureStore(context)
-        secure.write(SavedState(origin = endpoint.origin, slug = endpoint.storeSlug))
+        // Postal autofill is exercised with a controlled provider in CheckoutFlowTest.
+        // This full API flow starts with a saved address and never depends on public ViaCEP.
+        secure.write(SavedState(origin = endpoint.origin, slug = endpoint.storeSlug,
+            checkout = Checkout(address = Address("Rua do Teste", "10", "Centro", "São Paulo", "SP", "01001000", complement = "Apto 12"))))
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             waitText("Explorar cardápio")
             compose.onNodeWithText("Conta").performClick()
@@ -59,8 +62,19 @@ class CustomerApiFlowTest {
             click("Frango com requeijão")
             click("Borda de requeijão")
             compose.onNodeWithText("Adicionar à sacola").performClick()
-            waitText("Continuar pedido")
-            compose.onNodeWithText("Continuar pedido").performClick()
+            waitText("Produto adicionado à sacola")
+            val signedIn = requireNotNull(secure.read()?.session)
+            assertTrue(api.orders(signedIn.accessToken).items.isEmpty())
+            compose.onNode(hasText("Continuar comprando") and hasAnyAncestor(isDialog())).performClick()
+            waitText("Buscar sabores e ingredientes")
+            input("Buscar sabores e ingredientes", "Refrigerante")
+            compose.onNodeWithTag("customer_menu").performScrollToNode(hasText("Refrigerante 2 L"))
+            click("Refrigerante 2 L")
+            compose.onNodeWithText("Adicionar à sacola").performClick()
+            waitText("Produto adicionado à sacola")
+            assertEquals(2, requireNotNull(secure.read()).cart.size)
+            assertTrue(api.orders(signedIn.accessToken).items.isEmpty())
+            compose.onNodeWithText("Ir para checkout").performClick()
             waitText("Onde vamos entregar?")
             input("Rua", "Rua do Teste")
             input("Número", "10")
@@ -77,13 +91,17 @@ class CustomerApiFlowTest {
             val saved = requireNotNull(secure.read())
             val session = requireNotNull(saved.session)
             assertEquals("CUSTOMER", session.user.role)
-            assertEquals(listOf("calabresa", "frango"), saved.cart.single().flavorIds)
-            assertEquals("CREAM", saved.cart.single().crust)
-            val expected = 7000L - 600L + api.catalog().deliveryFee
+            assertEquals(listOf("calabresa", "frango"), saved.cart.first().flavorIds)
+            assertEquals("CREAM", saved.cart.first().crust)
+            val expected = 7000L + 1400L - 600L + api.catalog().deliveryFee
+            assertTrue(api.orders(session.accessToken).items.isEmpty())
             // Recreate during review: navigation restores, quote is retained in the ViewModel.
             scenario.recreate()
             waitText("Confirmar e enviar pedido")
             compose.onNodeWithText("Confirmar e enviar pedido").performClick()
+            waitText("Deseja enviar este pedido?")
+            assertTrue(api.orders(session.accessToken).items.isEmpty())
+            compose.onNodeWithText("Sim, enviar pedido").performClick()
             waitText("Aguardando confirmação")
             val created = api.orders(session.accessToken).items.single()
             assertEquals(expected, created.totals.total)
@@ -91,6 +109,9 @@ class CustomerApiFlowTest {
             assertEquals(1, created.totals.discountedPizzas)
             assertEquals(10000L - expected, created.change)
             assertEquals("Rua do Teste", created.address?.street)
+            assertEquals("Apto 12", created.address?.complement)
+            assertEquals(2, created.items.size)
+            assertEquals(api.catalog().deliveryFee, created.totals.fee)
             assertTrue(requireNotNull(secure.read()).cart.isEmpty())
             assertNull(secure.read()?.pending)
 

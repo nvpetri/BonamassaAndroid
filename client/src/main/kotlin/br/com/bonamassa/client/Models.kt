@@ -26,16 +26,21 @@ data class User(val id: String, val storeId: String, val name: String, val email
 data class Session(val accessToken: String, val expiresAt: String, val user: User)
 data class Address(
     val street: String = "", val number: String = "", val neighborhood: String = "",
-    val city: String = "", val state: String = "", val postalCode: String = "", val reference: String = ""
+    val city: String = "", val state: String = "", val postalCode: String = "", val reference: String = "",
+    val complement: String = "", val noComplement: Boolean = false
 ) {
     fun json() = objectOf("street" to street.trim(), "number" to number.trim(), "neighborhood" to neighborhood.trim(),
-        "city" to city.trim(), "state" to state.trim().uppercase(), "postalCode" to postalCode.filter(Char::isDigit), "reference" to reference.trim())
-    fun summary() = "$street, $number · $neighborhood · $city/$state" + if (reference.isBlank()) "" else " · $reference"
+        "city" to city.trim(), "state" to state.trim().uppercase(), "postalCode" to postalCode.filter(Char::isDigit), "reference" to reference.trim(),
+        "complement" to complement.trim(), "noComplement" to noComplement)
+    fun summary() = listOf("$street, $number", "$neighborhood · $city/$state", "CEP $postalCode",
+        complement.takeIf { it.isNotBlank() }?.let { "Complemento: $it" }.orEmpty(),
+        if (noComplement) "Sem complemento" else "", reference).filter { it.isNotBlank() }.joinToString(" · ")
     fun validate() {
         require(street.trim().length in 1..120 && number.trim().length in 1..20 && neighborhood.trim().length in 1..80 && city.trim().length in 1..80) { "Preencha rua, número, bairro e cidade." }
         require(state.trim().uppercase().matches(Regex("[A-Z]{2}"))) { "Informe a UF com duas letras." }
         require(postalCode.filter(Char::isDigit).length == 8) { "Informe o CEP com 8 números." }
         require(reference.length <= 240) { "A referência deve ter até 240 caracteres." }
+        require(complement.length <= 240 && (!noComplement || complement.isBlank())) { "Confira o complemento do endereço." }
     }
 }
 data class DraftLine(
@@ -127,7 +132,8 @@ data class Page(val items: List<Order>, val nextCursor: String?)
 object Decode {
     fun user(j: JSONObject) = User(j.getString("id"), j.getString("storeId"), j.getString("name"), j.getString("email"), j.getString("phone"), j.getString("role"))
     fun session(j: JSONObject) = Session(j.getString("accessToken"), j.getString("expiresAt"), user(j.getJSONObject("user")))
-    fun address(j: JSONObject) = Address(j.getString("street"), j.getString("number"), j.getString("neighborhood"), j.getString("city"), j.getString("state"), j.getString("postalCode"), j.getString("reference"))
+    fun address(j: JSONObject) = Address(j.getString("street"), j.getString("number"), j.getString("neighborhood"), j.getString("city"), j.getString("state"), j.getString("postalCode"), j.getString("reference"),
+        j.optString("complement", ""), j.optBoolean("noComplement", false))
     fun draft(j: JSONObject) = DraftLine(Kind.valueOf(j.getString("kind")), j.optString("productId", ""), j.optJSONArray("flavorIds")?.strings() ?: emptyList(),
         Size.valueOf(j.optString("size", "LARGE")), j.optString("crust", "NONE"), j.getInt("quantity"), j.optString("note", ""), j.optString("localId", UUID.randomUUID().toString()))
     fun catalog(j: JSONObject): Catalog {
