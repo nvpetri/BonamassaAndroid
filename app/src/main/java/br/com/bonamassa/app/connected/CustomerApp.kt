@@ -15,7 +15,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import br.com.bonamassa.app.BuildConfig
 import br.com.bonamassa.app.ui.*
 import br.com.bonamassa.client.Kind
 import kotlinx.coroutines.delay
@@ -35,7 +34,6 @@ fun CustomerApp(vm: CustomerViewModel = viewModel()) {
     var productId by rememberSaveable { mutableStateOf("") }
     var editId by rememberSaveable { mutableStateOf<String?>(null) }
     var authReturn by rememberSaveable { mutableStateOf("profile") }
-    var config by rememberSaveable { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(ui.error) { ui.error?.let { snackbar.showSnackbar(it); vm.clearError() } }
     fun order(id: String) { vm.selectOrder(id); route = "order" }
@@ -44,7 +42,6 @@ fun CustomerApp(vm: CustomerViewModel = viewModel()) {
         route = when (route) { "review" -> { vm.discardReview(); "checkout" }; "checkout" -> "cart"; "product" -> if (editId != null) "cart" else "menu"; "order" -> "orders"; "auth" -> authReturn; else -> "home" }
     }
     BackHandler(route !in listOf("home", "menu", "orders", "profile")) { if (!ui.busy) back() }
-    if (config && BuildConfig.DEBUG) ConnectionDialog(ui, { config = false }) { url, slug -> vm.configure(url, slug); config = false }
     if (ui.fatal) {
         Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
             Column(Modifier.padding(padding)) {
@@ -69,7 +66,6 @@ fun CustomerApp(vm: CustomerViewModel = viewModel()) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(error, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                             TextButton(onClick = { vm.refresh() }, enabled = !ui.refreshing && !ui.busy) { Text("Atualizar") }
-                            if (BuildConfig.DEBUG && ui.catalog == null) IconButton(onClick = { config = true }) { Icon(Icons.Default.Settings, "Configurar API") }
                         }
                     }
                 }
@@ -112,7 +108,7 @@ fun CustomerApp(vm: CustomerViewModel = viewModel()) {
                 "auth" -> AuthScreen(ui.busy, ui.saved.account?.email.orEmpty()) { email, password, name, phone -> vm.signIn(email, password, name, phone) { route = authReturn } }
                 "orders" -> ConnectedOrders(ui, { auth("orders") }, ::order, vm::moreOrders, { vm.refresh() })
                 "order" -> ConnectedOrder(ui, ui.orders.find { it.id == ui.selectedOrder }, { vm.refresh() }) { order, reason -> vm.cancel(order, reason) {} }
-                "profile" -> ConnectedProfile(ui, { auth("profile") }, vm::logout, { config = true })
+                "profile" -> ConnectedProfile(ui, { auth("profile") }, vm::logout)
             }
         }
     }

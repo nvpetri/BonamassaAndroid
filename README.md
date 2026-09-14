@@ -4,16 +4,15 @@ App nativo em Kotlin e Jetpack Compose, integrado à [APIBonamassa](https://gith
 
 ## Testar no Android
 
-1. Deixe a API funcionando no PC na porta **3001** e confirme que a loja está aberta no painel.
+1. Confirme que a API hospedada e a loja estão abertas no painel.
 2. Atualize este repositório e abra a pasta raiz no Android Studio. Use JDK 17 ou 21 no Gradle, SDK Android 35 e Build Tools 35.0.0.
 3. Execute a variante **debug** em um Android 8 ou superior. Também há um APK debug nos artefatos da execução do GitHub Actions.
-4. No app, abra **Conta → Configurar API**. Informe `http://IPV4-DO-PC:3001` e o identificador `bonamassa` (ou o slug configurado na sua API). Não acrescente `/v1`.
-5. No emulador Android Studio, use `http://10.0.2.2:3001`. No celular físico, use o IPv4 do PC na mesma rede Wi-Fi; `localhost` apontaria para o próprio celular.
-6. Toque em **Entrar ou criar conta → Criar conta**. Cadastre um cliente com senha de pelo menos 12 caracteres. A conta de gestor usada no painel não é uma conta de cliente.
-7. Monte a pizza, confira a sacola, escolha entrega ou retirada e pagamento. Toque em **Conferir valores** e depois **Confirmar e enviar pedido**.
-8. No painel conectado à mesma API/loja, aceite e prepare o pedido. A tela do cliente atualiza o status automaticamente enquanto estiver aberta.
+4. O aplicativo já abre conectado a `https://bonamassa-api.onrender.com`, na loja `bonamassa`; não há configuração de servidor na interface.
+5. Toque em **Entrar ou criar conta → Criar conta**. Cadastre um cliente com senha de pelo menos 12 caracteres. A conta de gestor usada no painel não é uma conta de cliente.
+6. Monte a pizza, confira a sacola, escolha entrega ou retirada e pagamento. Toque em **Conferir valores** e depois **Confirmar e enviar pedido**.
+7. No painel conectado à mesma API/loja, aceite e prepare o pedido. A tela do cliente atualiza o status automaticamente enquanto estiver aberta.
 
-Se o celular não conectar, abra `http://IPV4-DO-PC:3001/v1/health` no navegador dele. Confirme o IP atual, a mesma rede, o processo da API e a regra do Firewall do Windows para a porta 3001 na rede privada. Não é necessário publicar a API na internet nem abrir portas no roteador para esse teste.
+Se o celular não conectar, abra `https://bonamassa-api.onrender.com/v1/health` no navegador dele. A instância gratuita pode levar alguns segundos para despertar após um período sem uso.
 
 Para obter esta integração antes do merge:
 
@@ -57,15 +56,15 @@ O workflow `Android integrado` compila o APK, executa os testes e o lint, sobe P
 
 ## Configuração de build
 
-O padrão debug usa o endereço do emulador e permite alterá-lo em Conta. Para definir os valores iniciais na compilação:
+O endereço padrão fica em `gradle.properties` e não pode ser alterado pela interface. Para substituir o destino em uma compilação isolada de desenvolvimento ou teste:
 
 ```powershell
 .\gradlew.bat :app:assembleDebug -PbonamassaApiUrl=http://192.168.1.10:3001 -PbonamassaStoreSlug=bonamassa
 ```
 
-Uma configuração já salva no aparelho tem prioridade. Para trocar, saia da conta e use **Configurar API**. Um envio pendente precisa ser resolvido na conta/servidor originais antes de sair ou trocar de servidor.
+Ao atualizar uma instalação antiga, o aplicativo migra para o servidor configurado no build e encerra a sessão anterior. Se houver um envio pendente, o servidor original é preservado temporariamente para que ele possa ser verificado com segurança.
 
-Release exige HTTPS, não exibe configuração de servidor nem controles de demonstração. Configure a URL real no build, por exemplo `-PbonamassaApiUrl=https://api.seu-dominio.com.br`. Assinatura de produção e publicação na loja ainda precisam ser configuradas para o ambiente definitivo.
+Release exige HTTPS. Assinatura de produção e publicação na loja ainda precisam ser configuradas para o ambiente definitivo.
 
 A demonstração offline anterior continua isolada e pode ser aberta explicitamente em debug:
 
