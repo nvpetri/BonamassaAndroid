@@ -100,7 +100,7 @@ class ClientContractTest {
     @Test fun statusesKeepReturnsSeparateFromSuccessfulDelivery() {
         assertTrue(Status.RETURNING.active); assertFalse(Status.RETURNED.active)
         assertNotEquals(Status.DELIVERED.label, Status.RETURNED.label)
-        assertEquals(9, Status.entries.size)
+        assertEquals(10, Status.entries.size)
     }
     private fun order(status: Status = Status.NEW) = Order(UUID.randomUUID().toString(), 123, 1, status, null, Mode.PICKUP,
         "2026-09-13T00:00:00Z", "2026-09-13T00:00:00Z", emptyList(), quote().totals, user.name, null, Method.CARD, false, null, 0, "", emptyList())
@@ -165,4 +165,42 @@ class ClientContractTest {
             val logout = server.takeRequest(); assertEquals("DELETE", logout.method); assertEquals("/v1/sessions/current", logout.path)
         }
     }
+    @Test fun schedulingRequiresExplicitOptInAndDoesNotSendAClientDate() {
+        val checkout = Checkout(mode = Mode.PICKUP)
+        assertFalse(checkout.request(listOf(pizza)).has("allowScheduling"))
+        val request = checkout.request(listOf(pizza), allowScheduling = true)
+        assertTrue(request.getBoolean("allowScheduling"))
+        assertFalse(request.has("scheduledFor"))
+    }
+    @Test fun closedStoreCanAcceptReservationsOnlyWithServerOpeningTime() {
+        assertFalse(catalog().copy(open = false).canOrder)
+        assertFalse(catalog().copy(open = false, reservationsAvailable = true).canOrder)
+        assertTrue(catalog().copy(open = false, reservationsAvailable = true, nextOpening = "2026-09-14T20:00:00Z").canOrder)
+    }
+    @Test fun scheduledOrdersCanBeCancelledBeforeAcceptance() {
+        val scheduled = order(Status.SCHEDULED).copy(scheduledFor = "2026-09-14T20:00:00Z")
+        assertTrue(scheduled.status.active)
+        assertTrue(scheduled.canCancel)
+        assertEquals("/v1/orders/${scheduled.id}/cancel", Pending.cancel(scheduled, "Mudança de planos", endpoint, user).path)
+        assertFalse(order(Status.CONFIRMED).canCancel)
+    }
+    @Test fun scheduleFormattingDoesNotUseDeviceTimezone() {
+        val previous = java.util.TimeZone.getDefault()
+        try {
+            java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Tokyo"))
+            assertEquals("14/09 às 17:00", scheduledTime("2026-09-14T20:00:00Z"))
+        } finally { java.util.TimeZone.setDefault(previous) }
+    }
+    @Test fun scheduledQuoteIsDecodedAndPendingStillUsesOnlyTheQuoteId() {
+        val original = quote()
+        val j = objectOf("quoteId" to original.id, "expiresAt" to original.expiresAt, "items" to JSONArray(),
+            "subtotal" to 6500, "fee" to 500, "discount" to 0, "total" to 7000,
+            "promotion" to null, "scheduledFor" to "2026-09-14T20:00:00Z")
+        val decoded = Decode.quote(j)
+        assertEquals("2026-09-14T20:00:00Z", decoded.scheduledFor)
+        assertEquals(setOf("quoteId"), JSONObject(Pending.order(decoded, endpoint, user).body).keySet())
+        j.remove("scheduledFor")
+        assertNull(Decode.quote(j).scheduledFor)
+    }
+
 }

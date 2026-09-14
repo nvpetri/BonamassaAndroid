@@ -67,7 +67,7 @@ class BonamassaApi(val endpoint: Endpoint, private val http: OkHttpClient = newH
     }
     fun me(token: String) = Decode.user(request("GET", "/v1/me", token))
     fun logout(token: String) { request("DELETE", "/v1/sessions/current", token) }
-    fun quote(token: String, lines: List<DraftLine>, checkout: Checkout) = Decode.quote(request("POST", "/v1/orders/quote", token, checkout.request(lines), UUID.randomUUID().toString()))
+    fun quote(token: String, lines: List<DraftLine>, checkout: Checkout, allowScheduling: Boolean = false) = Decode.quote(request("POST", "/v1/orders/quote", token, checkout.request(lines, allowScheduling), UUID.randomUUID().toString()))
     fun send(token: String, pending: Pending) = Decode.order(request("POST", pending.path, token, JSONObject(pending.body), pending.key))
     fun order(token: String, id: String): Order {
         UUID.fromString(id)
