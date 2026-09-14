@@ -49,7 +49,8 @@ class CheckoutFlowTest {
         }
         compose.setContent { BonamassaTheme { ConnectedCheckout(ui, lookup) {} } }
         input("CEP", "01001000")
-        assertTrue(started.await(5, TimeUnit.SECONDS))
+        // Yield frames so Compose can start the effect and advance its debounce clock.
+        compose.waitUntil(10_000) { started.count == 0L }
         input("CEP", "02002000")
         release.countDown()
         waitText("Rua nova")

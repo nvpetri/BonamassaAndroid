@@ -68,6 +68,7 @@ class CustomerApiFlowTest {
             compose.onNode(hasText("Continuar comprando") and hasAnyAncestor(isDialog())).performClick()
             waitText("Buscar sabores e ingredientes")
             input("Buscar sabores e ingredientes", "Refrigerante")
+            compose.onNodeWithTag("customer_menu").performScrollToNode(hasText("Refrigerante 2 L"))
             click("Refrigerante 2 L")
             compose.onNodeWithText("Adicionar à sacola").performClick()
             waitText("Produto adicionado à sacola")

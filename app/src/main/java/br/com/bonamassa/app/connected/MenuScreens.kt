@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -61,7 +62,7 @@ fun ConnectedMenu(ui: CustomerUi, home: Boolean, menu: () -> Unit, open: (String
         (query.isBlank() || "${p.name} ${p.description}".contains(query, true)) && (!onlyFavorites || p.id in ui.saved.favorites) &&
         when (filter) { "Tradicionais" -> p.kind == Kind.PIZZA && p.group == "TRADITIONAL"; "Especiais" -> p.kind == Kind.PIZZA && p.group == "SPECIAL"; "Pizzas" -> p.kind == Kind.PIZZA; "Bebidas" -> p.kind == Kind.DRINK; "Combos" -> p.kind == Kind.COMBO; else -> true }
     }
-    LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    LazyColumn(Modifier.testTag("customer_menu"), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (!catalog.open) item { ReservationNotice(catalog) }
         if (home) item {
             Panel {
