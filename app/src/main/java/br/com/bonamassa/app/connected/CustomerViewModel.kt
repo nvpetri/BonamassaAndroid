@@ -150,7 +150,8 @@ class CustomerViewModel(application: Application) : AndroidViewModel(application
         change { it.copy(checkout = checkout) }
         _ui.update { it.copy(review = null) }
         val client = api()
-        val quote = withContext(Dispatchers.IO) { client.quote(token, cart, checkout) }
+        val scheduling = _ui.value.catalog?.reservationsAvailable == true
+        val quote = withContext(Dispatchers.IO) { client.quote(token, cart, checkout, scheduling) }
         _ui.update { it.copy(review = Review(quote, checkout)) }; done()
     }
     fun discardReview() { _ui.update { it.copy(review = null) } }
@@ -219,7 +220,7 @@ class CustomerViewModel(application: Application) : AndroidViewModel(application
                     }
                     // Find older active orders even when the newest page is full of completed ones.
                     if (firstHistoryLoad && page.nextCursor != null) {
-                        for (status in Status.entries.filter { it.active }) {
+                        for (status in Status.entries.filter { it.active && (it != Status.SCHEDULED || catalog.reservationsAvailable) }) {
                             var cursor: String? = null
                             do {
                                 val active = withContext(Dispatchers.IO) { client.orders(auth.accessToken, cursor, status) }

@@ -37,6 +37,7 @@ fun ConnectedOrders(ui: CustomerUi, login: () -> Unit, open: (String) -> Unit, m
                 Tag("PEDIDO #${order.number}", if (order.status.active) Brand.Gold else Brand.Muted)
                 Text(order.statusLabel, style = MaterialTheme.typography.titleLarge)
                 Text("${dateTime(order.createdAt)} · ${order.mode.label}", color = Brand.Muted)
+                if (order.status == Status.SCHEDULED) Text("Para ${scheduledTime(order.scheduledFor)} · São Paulo", color = Brand.Gold)
                 Text(order.items.joinToString(" • ") { "${it.quantity}× ${it.name}" }, style = MaterialTheme.typography.bodyMedium)
                 PriceLine("Total", money(order.totals.total), true)
                 Text("Ver detalhes", color = Brand.Red)
@@ -61,6 +62,7 @@ fun ConnectedOrder(ui: CustomerUi, order: Order?, refresh: () -> Unit, cancel: (
         Tag("PEDIDO #${order.number}")
         Text(order.statusLabel, style = MaterialTheme.typography.headlineLarge)
         Text(when (order.status) {
+            Status.SCHEDULED -> "Sua reserva aguarda a abertura da pizzaria. Você pode acompanhar ou cancelar antes da aceitação."
             Status.NEW -> "Seu pedido chegou à pizzaria e aguarda confirmação."
             Status.CONFIRMED -> "Tudo certo! A pizzaria aceitou seu pedido."
             Status.PREPARING -> "Sua pizza está sendo preparada com carinho."
@@ -71,13 +73,14 @@ fun ConnectedOrder(ui: CustomerUi, order: Order?, refresh: () -> Unit, cancel: (
             Status.CANCELLED -> "Este pedido foi cancelado."
             Status.DELIVERED -> "Obrigado por escolher a Bonamassa!"
         }, color = Brand.Muted)
+        if (order.status == Status.SCHEDULED) order.scheduledFor?.let { ReservationDetails(it) }
         Text("Última alteração: ${dateTime(order.updatedAt)}", style = MaterialTheme.typography.bodySmall)
         if (ui.syncError == null) Text("Atualização automática enquanto o app está aberto.", color = Brand.Green, style = MaterialTheme.typography.bodySmall)
         OutlinedButton(onClick = refresh, enabled = !ui.busy && !ui.refreshing) { Text("Atualizar pedido") }
         Panel {
             Text("Andamento", style = MaterialTheme.typography.titleMedium)
             order.events.forEach { event ->
-                val label = when (event.action) { "created" -> "Pedido enviado"; "accept" -> "Pedido aceito"; "prepare" -> "Preparo iniciado"; "ready" -> "Pedido pronto"; "assign" -> "Entregador atribuído"; "collect" -> "Retirado pelo entregador"; "start" -> "Saiu para entrega"; "complete" -> "Entrega concluída"; "pickup-complete" -> "Retirado pelo cliente"; "cancel" -> "Pedido cancelado"; "issue" -> "Ocorrência na entrega"; "return" -> "Devolução registrada"; "record-payment" -> "Pagamento registrado"; else -> "Pedido atualizado" }
+                val label = when (event.action) { "scheduled" -> "Reserva agendada"; "schedule-released" -> "Reserva liberada para atendimento"; "created" -> "Pedido enviado"; "accept" -> "Pedido aceito"; "prepare" -> "Preparo iniciado"; "ready" -> "Pedido pronto"; "assign" -> "Entregador atribuído"; "collect" -> "Retirado pelo entregador"; "start" -> "Saiu para entrega"; "complete" -> "Entrega concluída"; "pickup-complete" -> "Retirado pelo cliente"; "cancel" -> "Pedido cancelado"; "issue" -> "Ocorrência na entrega"; "return" -> "Devolução registrada"; "record-payment" -> "Pagamento registrado"; else -> "Pedido atualizado" }
                 Text("${dateTime(event.createdAt)} · $label")
             }
         }
@@ -91,7 +94,7 @@ fun ConnectedOrder(ui: CustomerUi, order: Order?, refresh: () -> Unit, cancel: (
             order.cashTendered?.let { Text("Dinheiro: ${money(it)} · Troco: ${money(order.change)}") }
             if (order.note.isNotBlank()) Text(order.note)
         }
-        if (order.status == Status.NEW) OutlinedButton(onClick = { cancelling = true }, enabled = !ui.busy && ui.saved.pending == null, modifier = Modifier.fillMaxWidth()) { Text("Cancelar pedido", color = Brand.Red) }
+        if (order.canCancel) OutlinedButton(onClick = { cancelling = true }, enabled = !ui.busy && ui.saved.pending == null, modifier = Modifier.fillMaxWidth()) { Text("Cancelar pedido", color = Brand.Red) }
         else if (order.status.active) Text("Para solicitar alterações ou cancelamento, fale com a pizzaria.", color = Brand.Muted, style = MaterialTheme.typography.bodySmall)
     }
 }

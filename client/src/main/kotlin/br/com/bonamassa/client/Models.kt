@@ -18,7 +18,7 @@ enum class Size(val label: String) { SMALL("Pequena · 4 fatias"), MEDIUM("Médi
 enum class Mode(val label: String) { DELIVERY("Entrega"), PICKUP("Retirada") }
 enum class Method(val label: String) { CASH("Dinheiro"), CARD("Cartão no recebimento"), PREPAID("Pago antecipadamente") }
 enum class Status(val label: String, val active: Boolean = true) {
-    NEW("Aguardando confirmação"), CONFIRMED("Pedido aceito"), PREPARING("Em preparo"),
+    SCHEDULED("Pedido agendado"), NEW("Aguardando confirmação"), CONFIRMED("Pedido aceito"), PREPARING("Em preparo"),
     READY("Pronto"), OUT_FOR_DELIVERY("Saiu para entrega"), RETURNING("Entrega em devolução"),
     DELIVERED("Concluído", false), RETURNED("Devolvido", false), CANCELLED("Cancelado", false)
 }
@@ -60,7 +60,7 @@ data class Checkout(
     val mode: Mode = Mode.DELIVERY, val address: Address = Address(), val payment: Method = Method.CARD,
     val cash: String = "", val note: String = "", val promotionId: String? = null
 ) {
-    fun request(items: List<DraftLine>): JSONObject {
+    fun request(items: List<DraftLine>, allowScheduling: Boolean = false): JSONObject {
         require(items.size in 1..30) { "Sua sacola precisa ter de 1 a 30 itens." }
         require(payment != Method.PREPAID) { "Escolha cartão ou dinheiro no recebimento." }
         if (mode == Mode.DELIVERY) address.validate()
@@ -68,7 +68,7 @@ data class Checkout(
         return objectOf("items" to JSONArray(items.map { it.json() }), "mode" to mode.name,
             "address" to if (mode == Mode.DELIVERY) address.json() else null, "note" to note.trim(),
             "payment" to payment.name, "cashTendered" to if (payment == Method.CASH) parseCash(cash) else null,
-            "promotionId" to promotionId)
+            "promotionId" to promotionId).apply { if (allowScheduling) put("allowScheduling", true) }
     }
 }
 fun parseCash(text: String): Long? {
@@ -87,8 +87,11 @@ data class Product(
 data class Promotion(val id: String, val name: String, val kind: String, val value: Long, val endsAt: String?, val remaining: Long?)
 data class Catalog(
     val storeId: String, val name: String, val open: Boolean, val deliveryFee: Long,
-    val products: List<Product>, val promotions: List<Promotion>, val serverTime: String
+    val products: List<Product>, val promotions: List<Promotion>, val serverTime: String,
+    val reservationsAvailable: Boolean = false, val nextOpening: String? = null,
+    val opensAt: String = "17:00", val closesAt: String = "03:00"
 ) {
+    val canOrder: Boolean get() = open || (reservationsAvailable && nextOpening != null)
     fun product(id: String) = products.find { it.id == id && it.available }
     fun estimate(line: DraftLine): Long {
         line.json()
@@ -103,14 +106,15 @@ data class Catalog(
 }
 data class ReceiptLine(val name: String, val detail: String, val note: String, val quantity: Int, val unitPrice: Long, val components: List<ReceiptLine>)
 data class Totals(val subtotal: Long, val fee: Long, val discount: Long, val total: Long, val promotion: String?, val discountedPizzas: Int = 0)
-data class Quote(val id: String, val expiresAt: String, val items: List<ReceiptLine>, val totals: Totals)
+data class Quote(val id: String, val expiresAt: String, val items: List<ReceiptLine>, val totals: Totals, val scheduledFor: String? = null)
 data class Event(val action: String, val version: Int, val createdAt: String)
 data class Order(
     val id: String, val number: Int, val version: Int, val status: Status, val deliveryStatus: String?,
     val mode: Mode, val createdAt: String, val updatedAt: String, val items: List<ReceiptLine>,
     val totals: Totals, val customerName: String, val address: Address?, val payment: Method,
-    val paymentRecorded: Boolean, val cashTendered: Long?, val change: Long, val note: String, val events: List<Event>
+    val paymentRecorded: Boolean, val cashTendered: Long?, val change: Long, val note: String, val events: List<Event>, val scheduledFor: String? = null
 ) {
+    val canCancel: Boolean get() = status == Status.NEW || status == Status.SCHEDULED
     val statusLabel: String get() = when {
         status == Status.READY && mode == Mode.PICKUP -> "Pronto para retirar"
         status == Status.DELIVERED && mode == Mode.PICKUP -> "Retirado"
@@ -134,14 +138,15 @@ object Decode {
             Product(p.getString("id"), p.getString("name"), p.getString("description"), Kind.valueOf(p.getString("category")), p.textOrNull("pizzaGroup"),
                 Size.entries.associateWith { p.getJSONObject("prices").getLong(it.name) }, p.getBoolean("available"), p.textOrNull("photo"),
                 p.optJSONArray("combo")?.objects(::draft) ?: emptyList(), p.optJSONObject("comparison")?.getLong("individualTotal"))
-        }, j.getJSONArray("promotions").objects { p -> Promotion(p.getString("id"), p.getString("name"), p.getString("kind"), p.getLong("value"), p.textOrNull("endsAt"), p.longOrNull("remaining")) }, j.getString("serverTime"))
+        }, j.getJSONArray("promotions").objects { p -> Promotion(p.getString("id"), p.getString("name"), p.getString("kind"), p.getLong("value"), p.textOrNull("endsAt"), p.longOrNull("remaining")) }, j.getString("serverTime"), store.optBoolean("reservationsAvailable", false), store.textOrNull("nextOpening"),
+            store.optString("opensAt", "17:00"), store.optString("closesAt", "03:00"))
     }
     fun line(j: JSONObject): ReceiptLine = ReceiptLine(j.getString("name"), j.getString("detail"), j.getString("note"), j.getInt("quantity"), j.optLong("unitPrice", 0), j.optJSONArray("components")?.objects(::line) ?: emptyList())
     fun totals(j: JSONObject) = Totals(j.getLong("subtotal"), j.getLong("fee"), j.getLong("discount"), j.getLong("total"), j.optJSONObject("promotion")?.getString("name"), j.optJSONObject("promotion")?.getInt("pizzaQuantity") ?: 0)
-    fun quote(j: JSONObject) = Quote(j.getString("quoteId"), j.getString("expiresAt"), j.getJSONArray("items").objects(::line), totals(j))
+    fun quote(j: JSONObject) = Quote(j.getString("quoteId"), j.getString("expiresAt"), j.getJSONArray("items").objects(::line), totals(j), j.textOrNull("scheduledFor"))
     fun order(j: JSONObject) = Order(j.getString("id"), j.getInt("number"), j.getInt("version"), Status.valueOf(j.getString("status")), j.textOrNull("deliveryStatus"),
         Mode.valueOf(j.getString("mode")), j.getString("createdAt"), j.getString("updatedAt"), j.getJSONArray("items").objects(::line), totals(j),
         j.getJSONObject("customer").getString("name"), j.optJSONObject("address")?.let(::address), Method.valueOf(j.getString("payment")), j.getBoolean("paymentRecorded"),
-        j.longOrNull("cashTendered"), j.getLong("change"), j.getString("note"), j.getJSONArray("events").objects { Event(it.getString("action"), it.getInt("version"), it.getString("createdAt")) })
+        j.longOrNull("cashTendered"), j.getLong("change"), j.getString("note"), j.getJSONArray("events").objects { Event(it.getString("action"), it.getInt("version"), it.getString("createdAt")) }, j.textOrNull("scheduledFor"))
     fun page(j: JSONObject) = Page(j.getJSONArray("items").objects(::order), j.textOrNull("nextCursor"))
 }

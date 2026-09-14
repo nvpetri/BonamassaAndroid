@@ -148,4 +148,50 @@ class CustomerApiFlowTest {
         api.logout(manager.accessToken)
         assertNotNull(promo.getString("id"))
     }
+    @Test fun closedStoreReservationPersistsAndEarlyOpeningReleasesItOnce() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("bonamassaIntegration") == "true")
+        val endpoint = Endpoint.parse("http://10.0.2.2:3001", "bonamassa", true)
+        val api = BonamassaApi(endpoint)
+        val manager = Decode.session(api.request("POST", "/v1/sessions", body = objectOf("storeSlug" to "bonamassa", "email" to "manager@teste.example", "password" to "Manager-ci-only-password-2026")))
+        fun settings(extra: JSONObject): JSONObject {
+            val store = api.request("GET", "/v1/staff/catalog", manager.accessToken).getJSONObject("store")
+            val body = objectOf("expectedVersion" to store.getInt("version"), "name" to store.getString("name"),
+                "deliveryFee" to store.getInt("deliveryFee"), "driverFee" to store.getInt("driverFee"))
+            extra.keys().forEach { body.put(it, extra.get(it)) }
+            return api.request("PATCH", "/v1/staff/store", manager.accessToken, body, UUID.randomUUID().toString())
+        }
+        fun clock(offset: Long) = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+            .withZone(java.time.ZoneId.of("America/Sao_Paulo")).format(Instant.now().plusSeconds(offset * 60))
+        val customer = api.signIn("reserve-${UUID.randomUUID()}@teste.example", "Reserva-ci-password-2026", "Cliente reserva", "11912345678")
+        var created: Order? = null
+        try {
+            settings(objectOf("scheduleEnabled" to true, "opensAt" to clock(60), "closesAt" to clock(180)))
+            val c = api.catalog()
+            assertFalse(c.open); assertTrue(c.canOrder)
+            val q = api.quote(customer.accessToken, listOf(DraftLine(Kind.PIZZA, flavorIds = listOf("calabresa"))),
+                Checkout(mode = Mode.PICKUP), allowScheduling = true)
+            assertEquals(c.nextOpening, q.scheduledFor)
+            val pending = Pending.order(q, endpoint, customer.user)
+            created = api.send(customer.accessToken, pending)
+            assertEquals(Status.SCHEDULED, created.status)
+            assertEquals(created.id, api.send(customer.accessToken, pending).id)
+            assertEquals(q.scheduledFor, api.order(customer.accessToken, created.id).scheduledFor)
+            try { settings(objectOf("open" to true)); fail("Early opening must be confirmed") }
+            catch (e: ApiFailure) { assertEquals("EARLY_OPEN_CONFIRMATION_REQUIRED", e.code) }
+            settings(objectOf("open" to true, "confirmEarlyOpen" to true))
+            val released = api.order(customer.accessToken, created.id)
+            assertEquals(Status.NEW, released.status)
+            assertEquals(1, released.events.count { it.action == "schedule-released" })
+            api.catalog()
+            assertEquals(released.version, api.order(customer.accessToken, created.id).version)
+        } finally {
+            created?.let {
+                val current = api.order(customer.accessToken, it.id)
+                if (current.canCancel) api.send(customer.accessToken, Pending.cancel(current, "Fim do teste", endpoint, customer.user))
+            }
+            settings(objectOf("scheduleEnabled" to false, "open" to true, "opensAt" to "17:00", "closesAt" to "03:00"))
+            api.logout(customer.accessToken); api.logout(manager.accessToken)
+        }
+    }
+
 }

@@ -79,11 +79,11 @@ fun ConnectedCart(ui: CustomerUi, quantity: (String, Int) -> Unit, remove: (Stri
                 Panel {
                     PriceLine("Prévia dos produtos", estimated?.let(::money) ?: "Atualize o cardápio", true)
                     Text("Entrega e promoção serão calculadas na próxima etapa.", color = Brand.Muted)
-                    if (ui.catalog?.open == false) Text("A pizzaria está fechada para novos pedidos.", color = Brand.Gold)
+                    if (ui.catalog?.open == false) ReservationNotice(ui.catalog)
                 }
             }
         }
-        BottomAction(if (ui.saved.session == null) "Entrar para continuar" else "Continuar pedido", enabled = editable && estimated != null && ui.catalog?.open == true, onClick = checkout)
+        BottomAction(if (ui.saved.session == null) "Entrar para continuar" else if (ui.catalog?.open == false) "Continuar reserva" else "Continuar pedido", enabled = editable && estimated != null && ui.catalog?.canOrder == true, onClick = checkout)
     }
 }
 
@@ -104,6 +104,7 @@ fun ConnectedCheckout(ui: CustomerUi, submit: (Checkout) -> Unit) {
     var promotion by rememberSaveable { mutableStateOf(initial.promotionId) }
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            if (ui.catalog?.open == false) ReservationNotice(ui.catalog)
             SectionHeading("Como você prefere?")
             Mode.entries.forEach { m -> OptionRow(m.label, if (m == Mode.DELIVERY) "Receba no seu endereço" else "Busque na pizzaria", mode == m, { mode = m }) }
             ui.saved.session?.user?.let { Text("Pedido de ${it.name} · ${it.phone}", color = Brand.Muted) }
@@ -132,7 +133,7 @@ fun ConnectedCheckout(ui: CustomerUi, submit: (Checkout) -> Unit) {
             Text("Descontos não incluem bordas, bebidas, combos ou entrega. A cotação mostra quantas pizzas receberam o benefício.", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
             Input("Observações do pedido", note, { note = it.take(240) }, singleLine = false)
         }
-        BottomAction("Conferir valores", enabled = !ui.busy && ui.saved.pending == null && ui.catalog?.open == true) {
+        BottomAction("Conferir valores", enabled = !ui.busy && ui.saved.pending == null && ui.catalog?.canOrder == true) {
             submit(Checkout(mode, Address(street, number, neighborhood, city, state, cep, reference), payment, cash, note, promotion))
         }
     }
@@ -171,7 +172,8 @@ fun ConnectedReview(ui: CustomerUi, back: () -> Unit, confirm: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Tag("VALORES CONFIRMADOS PELA PIZZARIA", Brand.Green)
-            SectionHeading("Tudo certo com o pedido?")
+            SectionHeading(if (review.quote.scheduledFor != null) "Vamos agendar sua pizza?" else "Tudo certo com o pedido?")
+            review.quote.scheduledFor?.let { ReservationDetails(it) }
             Receipt(review.quote.items)
             TotalsPanel(review.quote.totals)
             Panel {
@@ -184,9 +186,25 @@ fun ConnectedReview(ui: CustomerUi, back: () -> Unit, confirm: () -> Unit) {
                 }
                 if (review.checkout.note.isNotBlank()) Text(review.checkout.note)
             }
-            Text("Ao confirmar, o pedido será enviado à pizzaria. O pagamento será no recebimento.", color = Brand.Muted)
+            Text(if (review.quote.scheduledFor != null) "Ao confirmar, sua reserva ficará agendada. O pagamento será no recebimento." else "Ao confirmar, o pedido será enviado à pizzaria. O pagamento será no recebimento.", color = Brand.Muted)
             TextButton(onClick = back, enabled = !ui.busy && ui.saved.pending == null) { Text("Alterar pedido") }
         }
-        BottomAction("Confirmar e enviar pedido", money(review.quote.totals.total), !ui.busy && ui.saved.pending == null && ui.saved.session != null, confirm)
+        BottomAction(if (review.quote.scheduledFor != null) "Confirmar agendamento" else "Confirmar e enviar pedido", money(review.quote.totals.total), !ui.busy && ui.saved.pending == null && ui.saved.session != null, confirm)
+    }
+}
+
+@Composable
+fun ReservationNotice(catalog: Catalog?) {
+    val opening = catalog?.nextOpening
+    if (catalog?.reservationsAvailable == true && opening != null) {
+        ReservationDetails(opening)
+    } else Text("A pizzaria está fechada para novos pedidos.", color = Brand.Gold)
+}
+@Composable
+fun ReservationDetails(at: String) {
+    Panel {
+        Tag("PEDIDO AGENDADO", Brand.Gold)
+        Text("Para ${scheduledTime(at)}", style = MaterialTheme.typography.titleLarge)
+        Text("Horário de São Paulo. Seu pedido aguarda a abertura para entrar na fila de atendimento. Esse não é o horário de entrega ou retirada.", color = Brand.Muted)
     }
 }

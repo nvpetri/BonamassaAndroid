@@ -10,7 +10,7 @@ data class Pending(val path: String, val body: String, val key: String, val owne
     companion object {
         fun order(quote: Quote, endpoint: Endpoint, user: User) = Pending("/v1/orders", objectOf("quoteId" to quote.id).toString(), UUID.randomUUID().toString(), user.id, user.storeId, endpoint.origin)
         fun cancel(order: Order, reason: String, endpoint: Endpoint, user: User): Pending {
-            require(order.status == Status.NEW && reason.trim().length in 1..240) { "Informe o motivo. Só é possível cancelar antes de o pedido ser aceito." }
+            require(order.canCancel && reason.trim().length in 1..240) { "Informe o motivo. Só é possível cancelar antes de o pedido ser aceito." }
             return Pending("/v1/orders/${order.id}/cancel", objectOf("expectedVersion" to order.version, "reason" to reason.trim()).toString(), UUID.randomUUID().toString(), user.id, user.storeId, endpoint.origin)
         }
     }

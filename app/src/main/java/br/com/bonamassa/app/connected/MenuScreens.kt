@@ -62,12 +62,14 @@ fun ConnectedMenu(ui: CustomerUi, home: Boolean, menu: () -> Unit, open: (String
         when (filter) { "Tradicionais" -> p.kind == Kind.PIZZA && p.group == "TRADITIONAL"; "Especiais" -> p.kind == Kind.PIZZA && p.group == "SPECIAL"; "Pizzas" -> p.kind == Kind.PIZZA; "Bebidas" -> p.kind == Kind.DRINK; "Combos" -> p.kind == Kind.COMBO; else -> true }
     }
     LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (!catalog.open) item { ReservationNotice(catalog) }
         if (home) item {
             Panel {
                 Image(painterResource(R.drawable.bonamassa_logo), "Bonamassa", Modifier.size(76.dp))
-                Tag(if (catalog.open) "ABERTA PARA PEDIDOS" else "FECHADA NO MOMENTO", if (catalog.open) Brand.Green else Brand.Gold)
+                Tag(if (catalog.open) "ABERTA PARA PEDIDOS" else if (catalog.reservationsAvailable) "FECHADA · RESERVE SUA PIZZA" else "FECHADA NO MOMENTO", if (catalog.open) Brand.Green else Brand.Gold)
                 Text("Sua próxima pizza\ncomeça aqui.", style = MaterialTheme.typography.headlineLarge)
                 Text("Escolha seus sabores, capriche na borda e deixe o resto com a gente.", color = Brand.Muted)
+                if (catalog.reservationsAvailable) Text("Todos os dias · ${catalog.opensAt} às ${catalog.closesAt} · São Paulo", color = Brand.Muted)
                 PrimaryAction("Explorar cardápio", Modifier.fillMaxWidth(), onClick = menu)
             }
         }
