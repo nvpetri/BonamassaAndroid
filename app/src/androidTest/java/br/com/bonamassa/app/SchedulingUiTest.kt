@@ -36,6 +36,8 @@ class SchedulingUiTest {
         compose.onNodeWithText("PEDIDO AGENDADO").assertExists()
         compose.onNodeWithText("Confirmar e enviar pedido").assertDoesNotExist()
         compose.onNodeWithText("Confirmar agendamento").assertIsEnabled().performClick()
+        compose.runOnIdle { assertFalse(confirmed) }
+        compose.onNodeWithText("Sim, agendar pedido").assertIsEnabled().performClick()
         compose.runOnIdle { assertTrue(confirmed) }
     }
 }

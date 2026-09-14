@@ -34,6 +34,7 @@ fun CustomerApp(vm: CustomerViewModel = viewModel()) {
     var productId by rememberSaveable { mutableStateOf("") }
     var editId by rememberSaveable { mutableStateOf<String?>(null) }
     var authReturn by rememberSaveable { mutableStateOf("profile") }
+    var addedToCart by rememberSaveable { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(ui.error) { ui.error?.let { snackbar.showSnackbar(it); vm.clearError() } }
     fun order(id: String) { vm.selectOrder(id); route = "order" }
@@ -55,6 +56,11 @@ fun CustomerApp(vm: CustomerViewModel = viewModel()) {
         return
     }
     val isTab = route in listOf("home", "menu", "orders", "profile")
+    if (addedToCart && route == "cart") AlertDialog(
+        onDismissRequest = { addedToCart = false }, title = { Text("Produto adicionado à sacola") },
+        text = { Text("Sua sacola tem ${ui.saved.cart.sumOf { it.quantity }} produto(s). Deseja adicionar mais alguma coisa antes de revisar o pedido? Nada foi enviado à pizzaria ainda.") },
+        confirmButton = { TextButton(onClick = { addedToCart = false; if (ui.saved.session == null) auth("checkout") else route = "checkout" }, enabled = !ui.busy) { Text("Ir para checkout") } },
+        dismissButton = { TextButton(onClick = { addedToCart = false; route = "menu" }, enabled = !ui.busy) { Text("Continuar comprando") } })
     Scaffold(
         topBar = {
             Column(Modifier.statusBarsPadding()) {
@@ -96,7 +102,7 @@ fun CustomerApp(vm: CustomerViewModel = viewModel()) {
                     val catalog = ui.catalog
                     val product = catalog?.products?.find { it.id == productId }
                     if (catalog != null && product != null) key(productId, editId) {
-                        ConnectedProduct(catalog, product, ui.saved.cart.find { it.localId == editId }, ui, vm.endpoint()) { line -> vm.put(line) { route = "cart" } }
+                        ConnectedProduct(catalog, product, ui.saved.cart.find { it.localId == editId }, ui, vm.endpoint()) { line -> vm.put(line) { addedToCart = editId == null; route = "cart" } }
                     } else EmptyState("Produto indisponível", "Atualize o cardápio para escolher outro sabor.", Icons.Default.LocalPizza, "Ver cardápio", { route = "menu" })
                 }
                 "cart" -> ConnectedCart(ui, vm::quantity, vm::remove, { line -> productId = if (line.kind == Kind.PIZZA) line.flavorIds.first() else line.productId; editId = line.localId; route = "product" }, { route = "menu" }) {
@@ -104,7 +110,7 @@ fun CustomerApp(vm: CustomerViewModel = viewModel()) {
                 }
                 "checkout" -> if (ui.saved.session == null) AuthScreen(ui.busy, ui.saved.account?.email.orEmpty()) { email, password, name, phone -> vm.signIn(email, password, name, phone) { route = "checkout" } }
                     else ConnectedCheckout(ui) { checkout -> vm.quote(checkout) { route = "review" } }
-                "review" -> ConnectedReview(ui, { route = "checkout"; vm.discardReview() }) { vm.place(::order) }
+                "review" -> ConnectedReview(ui, { route = "checkout"; vm.discardReview() }, { vm.place(::order) }, { vm.discardReview(); route = "menu" })
                 "auth" -> AuthScreen(ui.busy, ui.saved.account?.email.orEmpty()) { email, password, name, phone -> vm.signIn(email, password, name, phone) { route = authReturn } }
                 "orders" -> ConnectedOrders(ui, { auth("orders") }, ::order, vm::moreOrders, { vm.refresh() })
                 "order" -> ConnectedOrder(ui, ui.orders.find { it.id == ui.selectedOrder }, { vm.refresh() }) { order, reason -> vm.cancel(order, reason) {} }
