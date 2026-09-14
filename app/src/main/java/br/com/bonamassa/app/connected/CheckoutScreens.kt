@@ -195,8 +195,9 @@ fun ConnectedReview(ui: CustomerUi, back: () -> Unit, confirm: () -> Unit) {
 
 @Composable
 fun ReservationNotice(catalog: Catalog?) {
-    if (catalog?.reservationsAvailable == true && catalog.nextOpening != null) {
-        ReservationDetails(catalog.nextOpening)
+    val opening = catalog?.nextOpening
+    if (catalog?.reservationsAvailable == true && opening != null) {
+        ReservationDetails(opening)
     } else Text("A pizzaria está fechada para novos pedidos.", color = Brand.Gold)
 }
 @Composable
