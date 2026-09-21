@@ -108,10 +108,25 @@ fun CustomerApp(vm: CustomerViewModel = viewModel()) {
                 "cart" -> ConnectedCart(ui, vm::quantity, vm::remove, { line -> productId = if (line.kind == Kind.PIZZA) line.flavorIds.first() else line.productId; editId = line.localId; route = "product" }, { route = "menu" }) {
                     if (ui.saved.session == null) auth("cart") else route = "checkout"
                 }
-                "checkout" -> if (ui.saved.session == null) AuthScreen(ui.busy, ui.saved.account?.email.orEmpty()) { email, password, name, phone -> vm.signIn(email, password, name, phone) { route = "checkout" } }
-                    else ConnectedCheckout(ui) { checkout -> vm.quote(checkout) { route = "review" } }
+                "checkout" -> if (ui.saved.session == null) AuthScreen(
+                    ui.busy, ui.saved.account?.email.orEmpty(),
+                    { email, password -> vm.signIn(email, password) { route = "checkout" } },
+                    vm::register,
+                    { email, code -> vm.confirmEmail(email, code) { route = "checkout" } },
+                    vm::resendVerification,
+                    vm::requestPasswordReset,
+                    vm::resetPassword
+                ) else ConnectedCheckout(ui) { checkout -> vm.quote(checkout) { route = "review" } }
                 "review" -> ConnectedReview(ui, { route = "checkout"; vm.discardReview() }, { vm.place(::order) }, { vm.discardReview(); route = "menu" })
-                "auth" -> AuthScreen(ui.busy, ui.saved.account?.email.orEmpty()) { email, password, name, phone -> vm.signIn(email, password, name, phone) { route = authReturn } }
+                "auth" -> AuthScreen(
+                    ui.busy, ui.saved.account?.email.orEmpty(),
+                    { email, password -> vm.signIn(email, password) { route = authReturn } },
+                    vm::register,
+                    { email, code -> vm.confirmEmail(email, code) { route = authReturn } },
+                    vm::resendVerification,
+                    vm::requestPasswordReset,
+                    vm::resetPassword
+                )
                 "orders" -> ConnectedOrders(ui, { auth("orders") }, ::order, vm::moreOrders, { vm.refresh() })
                 "order" -> ConnectedOrder(ui, ui.orders.find { it.id == ui.selectedOrder }, { vm.refresh() }) { order, reason -> vm.cancel(order, reason) {} }
                 "profile" -> ConnectedProfile(ui, { auth("profile") }, vm::logout)
