@@ -27,29 +27,86 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 @Composable
-fun AuthScreen(busy: Boolean, initialEmail: String, submit: (String, String, String?, String?) -> Unit) {
-    var register by rememberSaveable { mutableStateOf(false) }
+fun AuthScreen(
+    busy: Boolean,
+    initialEmail: String,
+    signIn: (String, String) -> Unit,
+    registerAccount: (String, String, String, String, () -> Unit) -> Unit,
+    confirmEmail: (String, String) -> Unit,
+    resendVerification: (String) -> Unit,
+    requestReset: (String, () -> Unit) -> Unit,
+    resetPassword: (String, String, String, () -> Unit) -> Unit,
+) {
+    var mode by rememberSaveable { mutableStateOf("login") }
     var name by rememberSaveable { mutableStateOf("") }
     var phone by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf(initialEmail) }
-    // Password never enters saved-instance state or persistent storage.
+    var code by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    val title = when (mode) {
+        "register" -> "Crie sua conta."
+        "verify" -> "Confirme seu e-mail."
+        "forgot" -> "Recupere sua senha."
+        "reset" -> "Crie uma nova senha."
+        else -> "Bom ter você aqui."
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        SectionHeading(if (register) "Chegue mais." else "Bom ter você aqui.", "Entre para pedir e acompanhar sua pizza.")
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            FilterChip(!register, { if (!busy) register = false }, { Text("Entrar") })
-            FilterChip(register, { if (!busy) register = true }, { Text("Criar conta") })
+        SectionHeading(title, when (mode) {
+            "verify" -> "Digite o código de 6 dígitos que enviamos para $email."
+            "forgot" -> "Informe seu e-mail para receber um código de recuperação."
+            "reset" -> "Digite o código recebido e escolha uma nova senha."
+            else -> "Entre para pedir e acompanhar sua pizza."
+        })
+        if (mode in listOf("login", "register")) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                FilterChip(mode == "login", { if (!busy) mode = "login" }, { Text("Entrar") })
+                FilterChip(mode == "register", { if (!busy) mode = "register" }, { Text("Criar conta") })
+            }
         }
-        if (register) {
+        if (mode == "register") {
             Input("Seu nome", name, { name = it.take(80) })
             Input("Telefone com DDD", phone, { phone = it.take(20) }, type = KeyboardType.Phone)
         }
-        Input("E-mail", email, { email = it.take(254) }, type = KeyboardType.Email)
-        OutlinedTextField(password, { password = it.take(128) }, Modifier.fillMaxWidth(), label = { Text("Senha") }, singleLine = true,
-            visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), enabled = !busy)
-        if (register) Text("Use de 12 a 128 caracteres na senha.", color = Brand.Muted)
-        PrimaryAction(if (register) "Criar minha conta" else "Entrar na minha conta", Modifier.fillMaxWidth(), !busy && email.isNotBlank() && password.isNotBlank()) {
-            submit(email, password, if (register) name else null, if (register) phone else null)
+        if (mode != "verify" && mode != "reset") Input("E-mail", email, { email = it.take(254) }, type = KeyboardType.Email)
+        if (mode == "verify" || mode == "reset") {
+            Input("Código de 6 dígitos", code, { code = it.filter(Char::isDigit).take(6) }, type = KeyboardType.Number)
+        }
+        if (mode == "login" || mode == "register") {
+            OutlinedTextField(password, { password = it.take(128) }, Modifier.fillMaxWidth(), label = { Text("Senha") }, singleLine = true,
+                visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), enabled = !busy)
+        }
+        if (mode == "register") Text("Use de 12 a 128 caracteres na senha.", color = Brand.Muted)
+        if (mode == "reset") {
+            OutlinedTextField(newPassword, { newPassword = it.take(128) }, Modifier.fillMaxWidth(), label = { Text("Nova senha") }, singleLine = true,
+                visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), enabled = !busy,
+                supportingText = { Text("Use de 12 a 128 caracteres.") })
+        }
+        when (mode) {
+            "login" -> {
+                PrimaryAction("Entrar na minha conta", Modifier.fillMaxWidth(), !busy && email.isNotBlank() && password.isNotBlank()) { signIn(email, password) }
+                TextButton(onClick = { mode = "forgot" }, enabled = !busy) { Text("Esqueci minha senha") }
+            }
+            "register" -> PrimaryAction("Criar minha conta", Modifier.fillMaxWidth(), !busy && email.isNotBlank() && password.isNotBlank() && name.isNotBlank()) {
+                registerAccount(email, password, name, phone) { code = ""; password = ""; mode = "verify" }
+            }
+            "verify" -> {
+                PrimaryAction("Confirmar e-mail", Modifier.fillMaxWidth(), !busy && code.length == 6) { confirmEmail(email, code) }
+                TextButton(onClick = { resendVerification(email) }, enabled = !busy) { Text("Reenviar código") }
+                TextButton(onClick = { mode = "login" }, enabled = !busy) { Text("Voltar para entrar") }
+            }
+            "forgot" -> {
+                PrimaryAction("Enviar código", Modifier.fillMaxWidth(), !busy && email.isNotBlank()) {
+                    requestReset(email) { code = ""; mode = "reset" }
+                }
+                TextButton(onClick = { mode = "login" }, enabled = !busy) { Text("Voltar") }
+            }
+            "reset" -> {
+                PrimaryAction("Salvar nova senha", Modifier.fillMaxWidth(), !busy && code.length == 6 && newPassword.length >= 12) {
+                    resetPassword(email, code, newPassword) { code = ""; newPassword = ""; password = ""; mode = "login" }
+                }
+                TextButton(onClick = { requestReset(email) {} }, enabled = !busy) { Text("Reenviar código") }
+            }
         }
     }
 }
