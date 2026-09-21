@@ -95,14 +95,7 @@ class CustomerViewModel(application: Application) : AndroidViewModel(application
             s.copy(orders = all)
         }
     }
-    fun signIn(email: String, password: String, name: String?, phone: String?, done: () -> Unit) = action {
-        require(email.trim().isNotEmpty() && password.isNotEmpty()) { "Informe e-mail e senha." }
-        if (name != null) {
-            require(name.trim().length in 1..80 && password.length in 12..128) { "Informe seu nome e uma senha de 12 a 128 caracteres." }
-            require(phone.orEmpty().filter(Char::isDigit).matches(Regex("[1-9][0-9]{9,14}"))) { "Informe o telefone com DDD." }
-        }
-        val client = api()
-        val next = withContext(Dispatchers.IO) { client.signIn(email, password, name, phone) }
+    private suspend fun acceptSession(client: BonamassaApi, next: Session, done: () -> Unit) {
         try { change { it.signedIn(next) } }
         catch (e: Exception) { withContext(Dispatchers.IO) { runCatching { client.logout(next.accessToken) } }; throw e }
         epoch++
@@ -110,6 +103,39 @@ class CustomerViewModel(application: Application) : AndroidViewModel(application
         _ui.update { it.copy(orders = emptyList(), cursor = null, review = null, selectedOrder = null) }
         done()
         refresh(force = true)
+    }
+    fun signIn(email: String, password: String, done: () -> Unit) = action {
+        require(email.trim().isNotEmpty() && password.isNotEmpty()) { "Informe e-mail e senha." }
+        val client = api()
+        val next = withContext(Dispatchers.IO) { client.signIn(email, password) }
+        acceptSession(client, next, done)
+    }
+    fun register(email: String, password: String, name: String, phone: String, done: () -> Unit) = action {
+        require(email.trim().isNotEmpty() && name.trim().length in 1..80 && password.length in 12..128) { "Informe nome, e-mail e uma senha de 12 a 128 caracteres." }
+        require(phone.filter(Char::isDigit).matches(Regex("[1-9][0-9]{9,14}"))) { "Informe o telefone com DDD." }
+        withContext(Dispatchers.IO) { api().register(email, password, name, phone) }
+        done()
+    }
+    fun resendVerification(email: String) = action {
+        require(email.trim().isNotEmpty()) { "Informe seu e-mail." }
+        withContext(Dispatchers.IO) { api().requestEmailVerification(email) }
+    }
+    fun confirmEmail(email: String, code: String, done: () -> Unit) = action {
+        require(code.filter(Char::isDigit).length == 6) { "Informe o código de 6 dígitos." }
+        val client = api()
+        val next = withContext(Dispatchers.IO) { client.confirmEmail(email, code) }
+        acceptSession(client, next, done)
+    }
+    fun requestPasswordReset(email: String, done: () -> Unit) = action {
+        require(email.trim().isNotEmpty()) { "Informe seu e-mail." }
+        withContext(Dispatchers.IO) { api().requestPasswordReset(email) }
+        done()
+    }
+    fun resetPassword(email: String, code: String, newPassword: String, done: () -> Unit) = action {
+        require(code.filter(Char::isDigit).length == 6) { "Informe o código de 6 dígitos." }
+        require(newPassword.length in 12..128) { "A nova senha deve ter de 12 a 128 caracteres." }
+        withContext(Dispatchers.IO) { api().resetPassword(email, code, newPassword) }
+        done()
     }
     fun logout() = action {
         editable()
