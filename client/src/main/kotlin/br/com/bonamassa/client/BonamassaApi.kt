@@ -55,15 +55,29 @@ class BonamassaApi(val endpoint: Endpoint, private val http: OkHttpClient = newH
         }
     }
     fun catalog() = Decode.catalog(request("GET", "/v1/stores/${endpoint.storeSlug}/catalog"))
-    fun signIn(email: String, password: String, name: String? = null, phone: String? = null): Session {
-        val body = objectOf("storeSlug" to endpoint.storeSlug, "email" to email.trim().lowercase(), "password" to password)
-        if (name != null) { body.put("name", name.trim()); body.put("phone", phone.orEmpty().filter(Char::isDigit)) }
-        val session = Decode.session(request("POST", if (name == null) "/v1/sessions" else "/v1/customers", body = body))
+    private fun emailBody(email: String) = objectOf("storeSlug" to endpoint.storeSlug, "email" to email.trim().lowercase())
+    private fun customer(session: Session): Session {
         if (session.user.role != "CUSTOMER") {
             runCatching { logout(session.accessToken) }
             throw ApiFailure(403, "CUSTOMER_ONLY", "Use uma conta de cliente. Contas da equipe entram pelo painel ou app de entregas.", null)
         }
         return session
+    }
+    fun signIn(email: String, password: String): Session =
+        customer(Decode.session(request("POST", "/v1/sessions", body = emailBody(email).put("password", password))))
+    fun register(email: String, password: String, name: String, phone: String) {
+        request("POST", "/v1/customers", body = emailBody(email).put("password", password).put("name", name.trim()).put("phone", phone.filter(Char::isDigit)))
+    }
+    fun requestEmailVerification(email: String) {
+        request("POST", "/v1/auth/email-verification/request", body = emailBody(email))
+    }
+    fun confirmEmail(email: String, code: String): Session =
+        customer(Decode.session(request("POST", "/v1/auth/email-verification/confirm", body = emailBody(email).put("code", code.filter(Char::isDigit)))))
+    fun requestPasswordReset(email: String) {
+        request("POST", "/v1/auth/password-reset/request", body = emailBody(email))
+    }
+    fun resetPassword(email: String, code: String, newPassword: String) {
+        request("POST", "/v1/auth/password-reset/confirm", body = emailBody(email).put("code", code.filter(Char::isDigit)).put("newPassword", newPassword))
     }
     fun me(token: String) = Decode.user(request("GET", "/v1/me", token))
     fun logout(token: String) { request("DELETE", "/v1/sessions/current", token) }
