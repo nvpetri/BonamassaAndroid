@@ -1,6 +1,6 @@
-# Integração do cliente Android 0.3.0
+# Integração do cliente Android 0.6.0
 
-Compatível com APIBonamassa `c9fcefad3827343a27abd5b0d14970a935b182b5`. O Android acessa a API REST diretamente. Painel e cozinha usam a mesma loja e os mesmos pedidos.
+Compatível com APIBonamassa `95f93f7f8331759c1b826c5bb04f255e680f8bbf`. O Android acessa a API REST diretamente. Painel, cozinha e entregador usam a mesma loja e os mesmos pedidos, com a mesma revisão da API nos testes integrados.
 
 ## Código
 
@@ -18,7 +18,9 @@ A variante padrão abre `CustomerApp`. Só o debug com `-PbonamassaDemo=true` ab
 
 | Método | Endpoint | Uso |
 |---|---|---|
-| POST | `/v1/customers` | Cadastro e emissão de sessão |
+| POST | `/v1/customers` | Cadastro e envio de código, sem emitir sessão |
+| POST | `/v1/auth/email-verification/request`, `.../confirm` | Enviar código e confirmar e-mail antes do primeiro acesso |
+| POST | `/v1/auth/password-reset/request`, `.../confirm` | Recuperação de senha com revogação das sessões anteriores |
 | POST | `/v1/sessions` | Login com `storeSlug`, e-mail e senha |
 | DELETE | `/v1/sessions/current` | Revogação da sessão |
 | GET | `/v1/stores/{slug}/catalog` | Produtos, regras, preços, promoções e loja aberta/fechada |
@@ -30,6 +32,8 @@ A variante padrão abre `CustomerApp`. Só o debug com `-PbonamassaDemo=true` ab
 | POST | `/v1/orders/{id}/cancel` | Motivo + `expectedVersion`, somente antes do aceite |
 
 Tokens são enviados como Bearer apenas ao servidor configurado. Contas de funcionários são rejeitadas; a sessão emitida por esse login é revogada. Uma resposta 401 remove a sessão local e pede login novamente. A sacola e qualquer envio pendente permanecem vinculados ao cliente original.
+
+A API renova a sessão a cada acesso e exige novo login após cinco dias sem uso. O aplicativo não usa a validade inicial como prazo absoluto. Quem interromper a confirmação após o cadastro pode usar **Confirmar meu e-mail** na tela de entrada. Os códigos são informados pelo usuário; o código fixo de CI permanece exclusivamente no código de instrumentação.
 
 ## Pedido e valores
 

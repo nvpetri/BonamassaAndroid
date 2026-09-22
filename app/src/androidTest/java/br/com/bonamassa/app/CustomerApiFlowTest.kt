@@ -18,8 +18,16 @@ import java.io.FileInputStream
 /** Opt-in only. CI supplies an isolated API/PostgreSQL store, never a developer's live store. */
 class CustomerApiFlowTest {
     @get:Rule val compose = createEmptyComposeRule()
-    private fun waitText(text: String) = compose.waitUntil(60_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
-    private fun click(text: String) { compose.onNodeWithText(text).performScrollTo().performClick() }
+    private fun waitText(text: String) {
+        try { compose.waitUntil(60_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() } }
+        catch (e: Exception) { screenshot("falha-espera.png"); throw AssertionError("Texto não encontrado: $text", e) }
+    }
+    private fun click(text: String) {
+        compose.waitUntil(60_000) { compose.onAllNodes(hasText(text) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        val node = compose.onNodeWithText(text)
+        if (compose.onAllNodes(hasText(text) and hasAnyAncestor(hasScrollAction())).fetchSemanticsNodes().isNotEmpty()) node.performScrollTo()
+        node.performClick()
+    }
     private fun input(label: String, text: String) { compose.onNodeWithText(label).performScrollTo().performTextReplacement(text) }
     private fun registerVerified(api: BonamassaApi, email: String, password: String, name: String, phone: String): Session {
         // The isolated API runs with NODE_ENV=test. This code must never live in the production client.
@@ -129,7 +137,7 @@ class CustomerApiFlowTest {
                 return Decode.order(api.request("POST", "$prefix/${order.id}/$action", token, extra, UUID.randomUUID().toString()))
             }
             var current = command(created, "accept")
-            assertEquals(Status.NEW, current.status)
+            assertEquals(Status.CONFIRMED, current.status)
             current = command(current, "prepare")
             assertEquals(Status.PREPARING, current.status)
             current = command(current, "ready")
@@ -179,6 +187,44 @@ class CustomerApiFlowTest {
         api.logout(manager.accessToken)
         assertNotNull(promo.getString("id"))
     }
+    @Test fun unfinishedVerificationCanResumeAndPasswordResetRevokesOldSessions() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("bonamassaIntegration") == "true")
+        val endpoint = Endpoint.parse("http://10.0.2.2:3001", "bonamassa", true)
+        val api = BonamassaApi(endpoint)
+        val email = "resume-${UUID.randomUUID()}@teste.example"
+        val password = "Customer-initial-password-2026"
+        val nextPassword = "Customer-new-password-2026"
+        api.register(email, password, "Cliente confirmação", "11912345678")
+        val secure = SecureStore(InstrumentationRegistry.getInstrumentation().targetContext)
+        secure.write(SavedState(origin = endpoint.origin, slug = endpoint.storeSlug))
+        ActivityScenario.launch(MainActivity::class.java).use {
+            waitText("Explorar cardápio")
+            click("Conta"); click("Entrar ou criar conta")
+            input("E-mail", email)
+            click("Confirmar meu e-mail")
+            waitText("Confirme seu e-mail.")
+            assertNull(secure.read()?.session)
+            input("Código de 6 dígitos", "123456")
+            click("Confirmar e-mail")
+            waitText("Sair da conta")
+            val otherSession = api.signIn(email, password)
+            click("Sair da conta"); click("Sair")
+            waitText("Entrar ou criar conta"); click("Entrar ou criar conta")
+            input("E-mail", email); click("Esqueci minha senha"); click("Enviar código")
+            waitText("Crie uma nova senha.")
+            input("Código de 6 dígitos", "123456")
+            input("Nova senha", nextPassword)
+            click("Salvar nova senha")
+            waitText("Bom ter você aqui.")
+            try { api.me(otherSession.accessToken); fail("Password reset must revoke all previous sessions") }
+            catch (e: ApiFailure) { assertEquals(401, e.status) }
+            input("Senha", nextPassword); click("Entrar na minha conta")
+            waitText("Sair da conta")
+            assertEquals(email, requireNotNull(secure.read()?.session).user.email)
+        }
+        secure.write(SavedState(origin = endpoint.origin))
+    }
+
     @Test fun closedStoreReservationPersistsAndEarlyOpeningReleasesItOnce() {
         assumeTrue(InstrumentationRegistry.getArguments().getString("bonamassaIntegration") == "true")
         val endpoint = Endpoint.parse("http://10.0.2.2:3001", "bonamassa", true)

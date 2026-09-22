@@ -16,7 +16,7 @@ O workflow `.github/workflows/android.yml`:
 2. Executa testes JVM, lint e gera APK debug + APK de instrumentação.
 3. Sobe PostgreSQL 17, baixa a versão fixa da API, aplica migrações e seed em um banco de teste exclusivo.
 4. Executa um emulador Android 35 com acesso à API por `10.0.2.2:3001`.
-5. Testa cadastro na UI, pizza meio a meio com borda, endereço, dinheiro/troco e promoção; compara valores persistidos pela API.
+5. Testa cadastro com confirmação de e-mail na UI, retomada de confirmação interrompida, recuperação de senha e revogação de sessões anteriores; pizza meio a meio com borda, endereço, dinheiro/troco e promoção são comparados aos valores persistidos pela API.
 6. Confirma na UI as mudanças de aceite, cozinha, saída e conclusão da entrega feitas pelos endpoints autorizados usados pelos outros aplicativos.
 7. Verifica combo com preço próprio, reabertura do app com envio pendente e recuperação sem duplicidade, cancelamento, isolamento entre clientes e revogação de sessão.
 8. Publica relatórios de teste e APK como artefatos da execução.

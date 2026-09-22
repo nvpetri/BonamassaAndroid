@@ -86,6 +86,7 @@ fun AuthScreen(
             "login" -> {
                 PrimaryAction("Entrar na minha conta", Modifier.fillMaxWidth(), !busy && email.isNotBlank() && password.isNotBlank()) { signIn(email, password) }
                 TextButton(onClick = { mode = "forgot" }, enabled = !busy) { Text("Esqueci minha senha") }
+                TextButton(onClick = { code = ""; mode = "verify"; resendVerification(email) }, enabled = !busy && email.isNotBlank()) { Text("Confirmar meu e-mail") }
             }
             "register" -> PrimaryAction("Criar minha conta", Modifier.fillMaxWidth(), !busy && email.isNotBlank() && password.isNotBlank() && name.isNotBlank()) {
                 registerAccount(email, password, name, phone) { code = ""; password = ""; mode = "verify" }
