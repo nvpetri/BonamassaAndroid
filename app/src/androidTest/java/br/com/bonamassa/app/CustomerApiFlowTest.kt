@@ -132,7 +132,7 @@ class CustomerApiFlowTest {
             current = command(current, "assign", objectOf("driverId" to driver.user.id))
             current = command(current, "collect", token = driver.accessToken, prefix = "/v1/driver/deliveries")
             current = command(current, "start", token = driver.accessToken, prefix = "/v1/driver/deliveries")
-            waitText("Saiu para entrega")
+            assertEquals(Status.OUT_FOR_DELIVERY, api.order(session.accessToken, created.id).status)
             current = command(current, "complete", objectOf("recipient" to "Cliente Android", "paymentCollected" to true), driver.accessToken, "/v1/driver/deliveries")
             assertEquals(Status.DELIVERED, current.status)
             waitText("Obrigado por escolher a Bonamassa!")
