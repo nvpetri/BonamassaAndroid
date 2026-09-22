@@ -128,7 +128,7 @@ class CustomerApiFlowTest {
             val driverRaw = api.request("POST", "/v1/staff/users", manager.accessToken, objectOf("email" to "driver-$tag@teste.example", "password" to "Driver-ci-password-2026", "name" to "Entregador CI", "phone" to "11922223333", "role" to "DRIVER"), UUID.randomUUID().toString())
             api.request("POST", "/v1/auth/email-verification/request", body = objectOf("storeSlug" to "bonamassa", "email" to "driver-$tag@teste.example"))
             val driver = Decode.session(api.request("POST", "/v1/auth/email-verification/confirm", body = objectOf("storeSlug" to "bonamassa", "email" to "driver-$tag@teste.example", "code" to "123456")))
-            api.request("PATCH", "/v1/driver/availability", driver.accessToken, objectOf("expectedVersion" to driver.user.version, "available" to true), UUID.randomUUID().toString())
+            api.request("PATCH", "/v1/driver/availability", driver.accessToken, objectOf("expectedVersion" to api.request("GET", "/v1/me", driver.accessToken).getInt("version"), "available" to true), UUID.randomUUID().toString())
             current = command(current, "assign", objectOf("driverId" to driver.user.id))
             current = command(current, "collect", token = driver.accessToken, prefix = "/v1/driver/deliveries")
             current = command(current, "start", token = driver.accessToken, prefix = "/v1/driver/deliveries")
