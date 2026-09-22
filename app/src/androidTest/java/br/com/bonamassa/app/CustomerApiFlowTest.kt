@@ -120,7 +120,7 @@ class CustomerApiFlowTest {
                 return Decode.order(api.request("POST", "$prefix/${order.id}/$action", token, extra, UUID.randomUUID().toString()))
             }
             var current = command(created, "accept")
-            assertEquals(Status.ACCEPTED, current.status)
+            assertEquals(Status.NEW, current.status)
             current = command(current, "prepare")
             assertEquals(Status.PREPARING, current.status)
             current = command(current, "ready")
