@@ -1,6 +1,6 @@
 # Integração do cliente Android 0.6.0
 
-Compatível com APIBonamassa `95f93f7f8331759c1b826c5bb04f255e680f8bbf`. O Android acessa a API REST diretamente. Painel, cozinha e entregador usam a mesma loja e os mesmos pedidos, com a mesma revisão da API nos testes integrados.
+Compatível com APIBonamassa `dad549c6225115c018e2d38e42b1c2b1965a6771`. O Android acessa a API REST diretamente. Painel, cozinha e entregador usam a mesma loja e os mesmos pedidos, com a mesma revisão da API nos testes integrados.
 
 ## Código
 
