@@ -21,6 +21,11 @@ class CustomerApiFlowTest {
     private fun waitText(text: String) = compose.waitUntil(60_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
     private fun click(text: String) { compose.onNodeWithText(text).performScrollTo().performClick() }
     private fun input(label: String, text: String) { compose.onNodeWithText(label).performScrollTo().performTextReplacement(text) }
+    private fun registerVerified(api: BonamassaApi, email: String, password: String, name: String, phone: String): Session {
+        // The isolated API runs with NODE_ENV=test. This code must never live in the production client.
+        api.register(email, password, name, phone)
+        return api.confirmEmail(email, "123456")
+    }
     private fun screenshot(name: String) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         // Shell-owned temporary output survives AGP uninstalling the tested app.
@@ -53,6 +58,10 @@ class CustomerApiFlowTest {
             input("E-mail", "android-$tag@teste.example")
             input("Senha", "Cliente-ci-password-2026")
             click("Criar minha conta")
+            waitText("Confirme seu e-mail.")
+            assertNull(secure.read()?.session)
+            input("Código de 6 dígitos", "123456")
+            click("Confirmar e-mail")
             waitText("Sair da conta")
             compose.onNodeWithText("Cardápio").performClick()
             waitText("Calabresa")
@@ -158,7 +167,7 @@ class CustomerApiFlowTest {
             val cancel = Pending.cancel(first, "Teste de cancelamento", endpoint, session.user)
             assertEquals(Status.CANCELLED, api.send(session.accessToken, cancel).status)
             assertEquals(Status.CANCELLED, api.send(session.accessToken, cancel).status)
-            val other = api.signIn("other-$tag@teste.example", "Other-ci-password-2026", "Outro cliente", "11988887777")
+            val other = registerVerified(api, "other-$tag@teste.example", "Other-ci-password-2026", "Outro cliente", "11988887777")
             try { api.order(other.accessToken, created.id); fail("Another customer's order must be private") } catch (e: ApiFailure) { assertEquals(404, e.status) }
             api.logout(other.accessToken)
             api.logout(session.accessToken)
@@ -184,7 +193,7 @@ class CustomerApiFlowTest {
         }
         fun clock(offset: Long) = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
             .withZone(java.time.ZoneId.of("America/Sao_Paulo")).format(Instant.now().plusSeconds(offset * 60))
-        val customer = api.signIn("reserve-${UUID.randomUUID()}@teste.example", "Reserva-ci-password-2026", "Cliente reserva", "11912345678")
+        val customer = registerVerified(api, "reserve-${UUID.randomUUID()}@teste.example", "Reserva-ci-password-2026", "Cliente reserva", "11912345678")
         var created: Order? = null
         try {
             settings(objectOf("scheduleEnabled" to true, "opensAt" to clock(60), "closesAt" to clock(180)))
