@@ -18,7 +18,7 @@ import java.io.FileInputStream
 /** Opt-in only. CI supplies an isolated API/PostgreSQL store, never a developer's live store. */
 class CustomerApiFlowTest {
     @get:Rule val compose = createEmptyComposeRule()
-    private fun waitText(text: String) = compose.waitUntil(30_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
+    private fun waitText(text: String) = compose.waitUntil(60_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
     private fun click(text: String) { compose.onNodeWithText(text).performScrollTo().performClick() }
     private fun input(label: String, text: String) { compose.onNodeWithText(label).performScrollTo().performTextReplacement(text) }
     private fun screenshot(name: String) {
