@@ -23,6 +23,8 @@ O workflow `.github/workflows/android.yml`:
 
 As chamadas de gestor e entregador existem somente no código de instrumentação e usam contas descartáveis da CI. Não estão no APK do cliente. As senhas de CI não são configurações de produção.
 
+O teste de armazenamento usa instâncias concorrentes com Android Keystore real para verificar que leituras não apagam gravações confirmadas de sessão, sacola e envios pendentes.
+
 O teste real é **opt-in**: `CustomerApiFlowTest` é ignorado se o argumento `bonamassaIntegration=true` não estiver presente. Para executá-lo manualmente, prepare uma API e banco isolados com exatamente as credenciais/seed do workflow e um emulador:
 
 ```powershell
