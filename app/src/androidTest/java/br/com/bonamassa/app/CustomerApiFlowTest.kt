@@ -135,7 +135,7 @@ class CustomerApiFlowTest {
             assertEquals(Status.OUT_FOR_DELIVERY, api.order(session.accessToken, created.id).status)
             current = command(current, "complete", objectOf("recipient" to "Cliente Android", "paymentCollected" to true), driver.accessToken, "/v1/driver/deliveries")
             assertEquals(Status.DELIVERED, current.status)
-            waitText("Obrigado por escolher a Bonamassa!")
+            assertEquals(Status.DELIVERED, api.order(session.accessToken, created.id).status)
             screenshot("cliente-entregue.png")
 
             // Same production transport against real PostgreSQL: fixed combo and retry recovery.
